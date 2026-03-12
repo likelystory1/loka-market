@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loka Market</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-brand" onclick="location.href='/'">
+    <span class="brand-icon">⛏</span>
+    <span class="brand-text">LOKA MARKET</span>
+  </div>
+  <div class="nav-links">
+    <a href="/" class="nav-link active">Market</a>
+  </div>
+</nav>
+
+<div class="stats-strip">
+  <div class="stat-item">
+    <span class="stat-label">Total Trades</span>
+    <span class="stat-value" id="statTrades">—</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-label">Unique Items</span>
+    <span class="stat-value" id="statItems">—</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-label">Active Traders</span>
+    <span class="stat-value" id="statTraders">—</span>
+  </div>
+</div>
+
+<div class="main-content">
+
+  <!-- tabs -->
+  <div class="tabs">
+    <button class="tab active" data-tab="market">All Items</button>
+    <button class="tab" data-tab="recent">Recent Transactions</button>
+    <button class="tab" data-tab="players">Top Spenders</button>
+  </div>
+
+  <!-- market tab -->
+  <div id="tab-market">
+    <div class="controls">
+      <div class="search-wrap">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" id="searchInput" class="search-input" placeholder="Search items...">
+      </div>
+      <div class="sort-controls">
+        <span class="sort-label">Sort:</span>
+        <button class="sort-btn active" data-sort="volume">Popularity</button>
+        <button class="sort-btn" data-sort="fmv">Fair Value</button>
+        <button class="sort-btn" data-sort="name">Name</button>
+      </div>
+    </div>
+    <div id="itemGrid" class="item-grid">
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <span>Loading market data…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- recent transactions tab -->
+  <div id="tab-recent" style="display:none">
+    <div id="recentWrap">
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <span>Loading recent trades…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- top spenders tab -->
+  <div id="tab-players" style="display:none">
+    <div id="playersWrap">
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <span>Loading leaderboard…</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer class="footer">
+  Loka Market &nbsp;•&nbsp; Economy data from <a href="https://lokamc.com" target="_blank">LokaMinecraft</a>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
