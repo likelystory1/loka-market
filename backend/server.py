@@ -10,6 +10,8 @@ import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, jsonify, send_from_directory, request, abort
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -18,7 +20,20 @@ FRONTEND = os.path.join(BASE_DIR, "..", "frontend")
 
 # ── app ───────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+# Restrict CORS to GET/HEAD/OPTIONS only — no write methods from any origin
+CORS(app, resources={r"/api/*": {
+    "origins": os.environ.get("ALLOWED_ORIGIN", "*"),
+    "methods": ["GET", "HEAD", "OPTIONS"],
+}})
+
+# Rate limiting — 60 requests/minute per IP on all API endpoints
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["60 per minute"],
+    storage_uri="memory://",
+)
 
 # ── cache (10-min TTL) ────────────────────────────────────────────────────────
 _CACHE:    dict = {}
@@ -42,10 +57,17 @@ def get_db():
 
 def ensure_indexes():
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_item    ON trades(item)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_ts      ON trades(ts)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_item       ON trades(item)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ts         ON trades(ts)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_buyer_uuid ON trades(buyer_uuid)")
     conn.commit()
     conn.close()
+
+# ── block write methods on all API routes ─────────────────────────────────────
+@app.before_request
+def enforce_read_only():
+    if request.path.startswith("/api/") and request.method not in ("GET", "HEAD", "OPTIONS"):
+        abort(405)
 
 # ── security headers ──────────────────────────────────────────────────────────
 @app.after_request
@@ -54,6 +76,14 @@ def add_headers(resp):
     resp.headers["X-Frame-Options"]        = "SAMEORIGIN"
     resp.headers["X-XSS-Protection"]       = "1; mode=block"
     resp.headers["Referrer-Policy"]        = "strict-origin-when-cross-origin"
+    resp.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' https://mc-heads.net data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
+    )
     return resp
 
 # ── UUID → username resolution ────────────────────────────────────────────────
@@ -351,9 +381,75 @@ def search():
     conn.close()
     return jsonify([r["item"] for r in rows])
 
+# ── api: top spenders leaderboard ─────────────────────────────────────────────
+@app.route("/api/players")
+def top_players():
+    cached = _cache_get("players")
+    if cached:
+        return jsonify(cached)
+
+    conn = get_db()
+    c    = conn.cursor()
+
+    # Top 50 buyers by total shards spent
+    buyers = c.execute("""
+        SELECT buyer_uuid,
+               SUM(price)  AS total_spent,
+               COUNT(*)    AS trade_count
+        FROM   trades
+        WHERE  buyer_uuid IS NOT NULL
+        GROUP  BY buyer_uuid
+        ORDER  BY total_spent DESC
+        LIMIT  50
+    """).fetchall()
+
+    if not buyers:
+        conn.close()
+        return jsonify([])
+
+    uuids = [b["buyer_uuid"] for b in buyers]
+
+    # Favorite item per buyer — one batch query, ordered so first row per
+    # buyer is their most-purchased item
+    ph   = ",".join("?" * len(uuids))
+    favs = c.execute(f"""
+        SELECT buyer_uuid, item, COUNT(*) AS cnt
+        FROM   trades
+        WHERE  buyer_uuid IN ({ph})
+        GROUP  BY buyer_uuid, item
+        ORDER  BY buyer_uuid, cnt DESC
+    """, uuids).fetchall()
+
+    conn.close()
+
+    # Keep only the top item per buyer (first occurrence after ORDER BY)
+    fav_item: dict[str, str] = {}
+    for row in favs:
+        if row["buyer_uuid"] not in fav_item:
+            fav_item[row["buyer_uuid"]] = row["item"]
+
+    # Resolve all UUIDs to usernames in parallel
+    names = resolve_uuids(uuids)
+
+    results = [
+        {
+            "rank":        i + 1,
+            "uuid":        uid,
+            "name":        names.get(uid, uid[:8] + "…"),
+            "total_spent": round(b["total_spent"], 2),
+            "trade_count": b["trade_count"],
+            "fav_item":    fav_item.get(uid),
+        }
+        for i, (b, uid) in enumerate(zip(buyers, uuids))
+    ]
+
+    _cache_set("players", results)
+    return jsonify(results)
+
 # ── startup ───────────────────────────────────────────────────────────────────
 ensure_indexes()
 threading.Thread(target=_warmup, daemon=True).start()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    # For local dev only — production uses gunicorn (see gunicorn.conf.py)
+    app.run(host="127.0.0.1", port=5000, debug=False)
