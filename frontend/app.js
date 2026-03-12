@@ -12,7 +12,8 @@ function formatPrice(n) {
 }
 
 function iconUrl(name) {
-  return `https://mc-heads.net/item/${name.toLowerCase()}`;
+  const slug = name.toLowerCase().replace(/ /g, '_');
+  return `https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21.11/assets/minecraft/textures/item/${slug}.png`;
 }
 
 function avatarUrl(uid) {
@@ -65,7 +66,7 @@ async function loadStats() {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
-/*  INDEX PAGE                                                                */
+/*  MARKET PAGE                                                                */
 /* ══════════════════════════════════════════════════════════════════════════ */
 
 let allItems     = [];
@@ -270,7 +271,7 @@ function initTabs() {
   });
 }
 
-/* ── init index ─────────────────────────────────────────────────────────── */
+/* ── init market ────────────────────────────────────────────────────────── */
 async function initIndex() {
   loadStats();
   initTabs();
@@ -434,9 +435,698 @@ async function initItem() {
     </tr>`).join('');
 }
 
-/* ── router ──────────────────────────────────────────────────────────────── */
-if (document.getElementById('itemGrid')) {
-  initIndex();
-} else if (document.getElementById('zoneBody')) {
-  initItem();
+/* ══════════════════════════════════════════════════════════════════════════ */
+/*  LOKA API SHARED UTILS                                                     */
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+const LOKA_API = '/api/lokamc';
+
+const WORLD_NAMES  = { north: 'Kalros', west: 'Ascalon', south: 'Garama' };
+const WORLD_COLORS = { north: '#10b981', west: '#6366f1', south: '#f59e0b' };
+
+function worldName(w)  { return WORLD_NAMES[w]  ?? w ?? '—'; }
+function worldColor(w) { return WORLD_COLORS[w] ?? '#8b949e'; }
+
+function formatVulnWindow(w) {
+  if (w == null) return '—';
+  const start = ((w - 4) + 24) % 24;
+  const end   = (w + 4)  % 24;
+  const fmt   = h => {
+    const ampm = h < 12 ? 'am' : 'pm';
+    const h12  = h % 12 || 12;
+    return `${h12}${ampm}`;
+  };
+  return `${fmt(start)} – ${fmt(end)} ST`;
 }
+
+async function fetchPaged(url, embeddedKey) {
+  const out = [];
+  let page = 0;
+  while (true) {
+    const sep = url.includes('?') ? '&' : '?';
+    const res = await fetch(`${url}${sep}size=100&page=${page}`).then(r => r.json());
+    const items = res._embedded?.[embeddedKey] ?? (Array.isArray(res) ? res : []);
+    if (!items.length) break;
+    out.push(...items);
+    const pg = res.page;
+    if (!pg || page >= pg.totalPages - 1) break;
+    page++;
+  }
+  return out;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/*  ALLIANCES PAGE                                                            */
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+let allAlliances = [];
+let allTownsMap  = {};   // id → town object
+
+function pct(v, max) {
+  if (!max || max <= 0) return 0;
+  return Math.min(100, (v / max) * 100);
+}
+
+/* Rank color palette (index 0 = rank 1) */
+const RANK_COLORS = [
+  '#f59e0b', // 1 gold
+  '#94a3b8', // 2 silver
+  '#cd7f32', // 3 bronze
+  '#6366f1', // 4
+  '#10b981', // 5
+  '#ef4444', // 6
+  '#ec4899', // 7
+  '#3b82f6', // 8
+  '#f97316', // 9
+  '#a855f7', // 10
+  '#14b8a6', // 11
+];
+
+function rankColor(rank) {
+  const idx = (rank - 1) % RANK_COLORS.length;
+  return RANK_COLORS[idx];
+}
+
+/* Returns the alliance-strength-sorted rank list */
+function allianceRanked() {
+  return [...allAlliances].sort((a, b) => (b.strength ?? 0) - (a.strength ?? 0));
+}
+
+/* Compute champion for each continent + balak */
+function computeChampions() {
+  const worlds = ['north', 'west', 'south'];
+  const champs = {};
+
+  for (const world of worlds) {
+    // Count towns per alliance in this world
+    const counts = {};
+    for (const a of allAlliances) {
+      const townCount = (a.townIds ?? []).filter(tid => {
+        const t = allTownsMap[tid];
+        return t && t.world === world && !t.deleted;
+      }).length;
+      if (townCount > 0) counts[a.id] = townCount;
+    }
+    // Pick alliance with most towns
+    let best = null;
+    let bestCount = 0;
+    for (const [id, count] of Object.entries(counts)) {
+      if (count > bestCount) {
+        bestCount = count;
+        best = allAlliances.find(a => a.id === id) ?? null;
+      }
+    }
+    champs[world] = best ? { alliance: best, stat: bestCount } : null;
+  }
+
+  // Balak: highest bbStrength
+  const byBB = [...allAlliances].sort((a, b) => (b.bbStrength ?? 0) - (a.bbStrength ?? 0));
+  champs.balak = byBB.length ? { alliance: byBB[0], stat: byBB[0].bbStrength ?? 0 } : null;
+
+  return champs;
+}
+
+function renderChampions() {
+  const el = document.getElementById('allianceChampions');
+  const ranked = allianceRanked();
+  const champs = computeChampions();
+
+  const categories = [
+    { key: 'north', label: 'Kalros',  icon: '🌿', color: '#10b981', statLabel: 'towns' },
+    { key: 'west',  label: 'Ascalon', icon: '⚔️', color: '#6366f1', statLabel: 'towns' },
+    { key: 'south', label: 'Garama',  icon: '🔥', color: '#f59e0b', statLabel: 'towns' },
+    { key: 'balak', label: 'Balak',   icon: '💠', color: '#ec4899', statLabel: 'balak' },
+  ];
+
+  el.innerHTML = categories.map(cat => {
+    const entry = champs[cat.key];
+    if (!entry) {
+      return `
+        <div class="champion-card" style="--champ-color:${cat.color}">
+          <div class="champion-crown">👑</div>
+          <div class="champion-world-label" style="color:${cat.color}">${cat.icon} ${cat.label}</div>
+          <div class="champion-name" style="color:var(--muted)">No data</div>
+        </div>`;
+    }
+    const { alliance, stat } = entry;
+    const rank = ranked.findIndex(x => x.id === alliance.id) + 1;
+    const statText = cat.statLabel === 'balak'
+      ? `${stat.toLocaleString()} Balak`
+      : `${stat} town${stat !== 1 ? 's' : ''}`;
+    return `
+      <div class="champion-card" style="--champ-color:${cat.color}"
+           onclick="openAllianceModal('${alliance.id}')">
+        <div class="champion-crown">👑</div>
+        <div class="champion-world-label" style="color:${cat.color}">${cat.icon} ${cat.label}</div>
+        <div class="champion-name">${alliance.name}</div>
+        <div class="champion-stat" style="color:${cat.color}">${statText}</div>
+        <div class="champion-rank">Overall rank #${rank}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderAlliances() {
+  const grid = document.getElementById('allianceGrid');
+  const q    = (document.getElementById('allianceSearch')?.value ?? '').toLowerCase().trim();
+
+  const ranked = allianceRanked();
+
+  let list = ranked.filter(a => !q || a.name.toLowerCase().includes(q));
+
+  if (!list.length) {
+    grid.innerHTML = '<div class="empty-state">No alliances found.</div>';
+    return;
+  }
+
+  grid.innerHTML = list.map(a => {
+    const rank      = ranked.findIndex(x => x.id === a.id) + 1;
+    const color     = rankColor(rank);
+    const townCount = a.townIds?.length ?? 0;
+    const vuln      = formatVulnWindow(a.vulnerabilityWindow);
+
+    return `
+      <div class="alliance-card" style="--a-color:${color}" onclick="openAllianceModal('${a.id}')">
+        <div class="alliance-card-left">
+          <div class="alliance-rank-badge" style="color:${color}">#${rank}</div>
+          <div class="alliance-color-bar" style="background:${color}"></div>
+          <div class="alliance-main">
+            <div class="alliance-name">${a.name}</div>
+            <div class="alliance-meta-row">
+              <div class="ameta-item">
+                <span class="ameta-label">Continent</span>
+                <span class="ameta-val" style="color:${color}">${(a.strength ?? 0).toLocaleString()}</span>
+              </div>
+              <div class="ameta-item">
+                <span class="ameta-label">Balak</span>
+                <span class="ameta-val ameta-balak">${(a.bbStrength ?? 0).toLocaleString()}</span>
+              </div>
+              <div class="ameta-item">
+                <span class="ameta-label">Towns</span>
+                <span class="ameta-val">${townCount}</span>
+              </div>
+              <div class="ameta-item">
+                <span class="ameta-label">Vuln Window</span>
+                <span class="ameta-val ameta-vuln">${vuln}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="alliance-chevron">›</div>
+      </div>`;
+  }).join('');
+}
+
+function openAllianceModal(id) {
+  const a = allAlliances.find(x => x.id === id);
+  if (!a) return;
+
+  document.getElementById('modalAllianceName').textContent = a.name;
+
+  const ranked    = allianceRanked();
+  const rank      = ranked.findIndex(x => x.id === a.id) + 1;
+  const towns     = (a.townIds ?? []).map(tid => allTownsMap[tid]);
+  const vuln      = formatVulnWindow(a.vulnerabilityWindow);
+  const maxStr    = Math.max(1, ...allAlliances.map(x => x.strength   ?? 0));
+  const maxBB     = Math.max(1, ...allAlliances.map(x => x.bbStrength ?? 0));
+  const strPct    = pct(a.strength   ?? 0, maxStr);
+  const bbPct     = pct(a.bbStrength ?? 0, maxBB);
+
+  const townRows = towns.length
+    ? towns.map(t => {
+        if (!t) return `<div class="modal-town-item"><span class="modal-town-name" style="color:var(--muted)">Unknown town</span></div>`;
+        const wc = worldColor(t.world);
+        const wn = worldName(t.world);
+        return `
+          <div class="modal-town-item">
+            <span class="modal-town-name">${t.name}</span>
+            <span class="modal-town-meta">
+              <span style="color:${wc}">${wn}</span>
+              · Lv.${Math.round(t.townLevel ?? 0)}
+              · ${Object.keys(t.members ?? {}).length} members
+            </span>
+          </div>`;
+      }).join('')
+    : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No towns in this alliance.</div>';
+
+  document.getElementById('modalBody').innerHTML = `
+    <div class="modal-stats-grid">
+      <div class="modal-stat">
+        <div class="modal-stat-label">Power Rank</div>
+        <div class="modal-stat-val" style="color:${rankColor(rank)}">#${rank}</div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">Continent</div>
+        <div class="modal-stat-val astat-cc">${(a.strength ?? 0).toLocaleString()}</div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">Balak</div>
+        <div class="modal-stat-val astat-bb">${(a.bbStrength ?? 0).toLocaleString()}</div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">Vulnerability Window</div>
+        <div class="modal-stat-val">${vuln}</div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">Member Towns</div>
+        <div class="modal-stat-val">${towns.length}</div>
+      </div>
+    </div>
+    <div class="strength-bars">
+      <div class="strength-bar-wrap">
+        <span class="strength-bar-label">CC</span>
+        <div class="strength-bar-track">
+          <div class="strength-bar-fill strength-bar-cc" style="width:${strPct.toFixed(1)}%"></div>
+        </div>
+      </div>
+      <div class="strength-bar-wrap">
+        <span class="strength-bar-label">BB</span>
+        <div class="strength-bar-track">
+          <div class="strength-bar-fill strength-bar-bb" style="width:${bbPct.toFixed(1)}%"></div>
+        </div>
+      </div>
+    </div>
+    ${towns.length
+      ? `<div class="modal-section">
+           <div class="modal-section-title">Member Towns (${towns.length})</div>
+           <div class="modal-town-list">${townRows}</div>
+         </div>`
+      : `<div class="modal-section"><div class="modal-section-title">Member Towns</div>${townRows}</div>`}
+  `;
+
+  document.getElementById('allianceModal').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('allianceModal').style.display = 'none';
+}
+
+async function initAlliances() {
+  try {
+    const [allianceData, towns] = await Promise.all([
+      fetchPaged(`${LOKA_API}/alliances`, 'alliances'),
+      fetchPaged(`${LOKA_API}/towns/search/findAll`, 'towns'),
+    ]);
+    allAlliances = allianceData;
+    towns.forEach(t => { allTownsMap[t.id] = t; });
+
+    renderChampions();
+    renderAlliances();
+
+    let searchTimer;
+    document.getElementById('allianceSearch').addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(renderAlliances, 150);
+    });
+
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+  } catch (e) {
+    document.getElementById('allianceGrid').innerHTML =
+      '<div class="empty-state">Failed to load alliance data. Check console for details.</div>';
+    document.getElementById('allianceChampions').innerHTML =
+      '<div class="empty-state">Failed to load champion data.</div>';
+    console.error(e);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/*  TOWNS PAGE                                                                */
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+let allTowns        = [];
+let townAllianceMap = {};  // townId → { id, name }
+let currentContinent = null; // null=hub, 'north'|'west'|'south'
+const _playerCache  = {};
+
+async function fetchPlayer(lokaId) {
+  if (lokaId in _playerCache) return _playerCache[lokaId];
+  try {
+    const p = await fetch(`${LOKA_API}/players/${lokaId}`).then(r => r.ok ? r.json() : null);
+    _playerCache[lokaId] = p;
+    return p;
+  } catch (_) {
+    _playerCache[lokaId] = null;
+    return null;
+  }
+}
+
+function buildTownAllianceMap(alliances) {
+  townAllianceMap = {};
+  for (const a of alliances) {
+    for (const tid of (a.townIds ?? [])) {
+      townAllianceMap[tid] = { id: a.id, name: a.name };
+    }
+  }
+}
+
+function memberCount(t) {
+  return t.members ? Object.keys(t.members).length : 0;
+}
+
+function selectContinent(world) {
+  currentContinent = world;
+  const searchBar = document.getElementById('townSearchBar');
+  if (!world) {
+    searchBar.style.display = 'none';
+    renderTownHub();
+  } else {
+    searchBar.style.display = '';
+    const inp = document.getElementById('townSearch');
+    if (inp) inp.value = '';
+    renderContinent(world);
+  }
+}
+
+function renderTownHub() {
+  const content = document.getElementById('townContent');
+  const liveTowns = allTowns.filter(t => !t.deleted);
+
+  const northCount = liveTowns.filter(t => t.world === 'north').length;
+  const westCount  = liveTowns.filter(t => t.world === 'west').length;
+  const southCount = liveTowns.filter(t => t.world === 'south').length;
+
+  // Top 10 by townLevel
+  const top10 = [...liveTowns]
+    .sort((a, b) => (b.townLevel ?? 0) - (a.townLevel ?? 0))
+    .slice(0, 10);
+
+  const topRows = top10.map((t, i) => {
+    const rank = i + 1;
+    const rankClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : '';
+    const rankLabel = rank === 1 ? '1ST' : rank === 2 ? '2ND' : rank === 3 ? '3RD' : `#${rank}`;
+    const ally = townAllianceMap[t.id];
+    const wColor = worldColor(t.world);
+    const wName  = worldName(t.world);
+    const level  = Math.round(t.townLevel ?? 0);
+    return `
+      <div class="top-town-row" onclick="openTownModal('${t.id}')">
+        <div class="top-town-rank ${rankClass}">${rankLabel}</div>
+        <div class="top-town-info">
+          <div class="top-town-name">${t.name}</div>
+          ${ally ? `<div class="top-town-alliance" style="color:var(--muted)">${ally.name}</div>` : ''}
+        </div>
+        <div class="top-town-stats">
+          <span class="top-town-world" style="color:${wColor}">${wName}</span>
+          <span class="top-town-level">Lv.${level}</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  content.innerHTML = `
+    <div class="continent-hub">
+      <div class="continent-hub-title">Choose a Continent</div>
+      <div class="continent-cards">
+        <div class="continent-card continent-card--north" onclick="selectContinent('north')">
+          <div class="continent-icon">🌿</div>
+          <div class="continent-name">Kalros</div>
+          <div class="continent-count">${northCount} town${northCount !== 1 ? 's' : ''}</div>
+          <div class="continent-arrow">Explore →</div>
+        </div>
+        <div class="continent-card continent-card--west" onclick="selectContinent('west')">
+          <div class="continent-icon">⚔️</div>
+          <div class="continent-name">Ascalon</div>
+          <div class="continent-count">${westCount} town${westCount !== 1 ? 's' : ''}</div>
+          <div class="continent-arrow">Explore →</div>
+        </div>
+        <div class="continent-card continent-card--south" onclick="selectContinent('south')">
+          <div class="continent-icon">🔥</div>
+          <div class="continent-name">Garama</div>
+          <div class="continent-count">${southCount} town${southCount !== 1 ? 's' : ''}</div>
+          <div class="continent-arrow">Explore →</div>
+        </div>
+      </div>
+    </div>
+    <div class="top-towns-section">
+      <div class="top-towns-header">
+        <div class="top-towns-title">🏆 Top Towns on Loka</div>
+        <div class="top-towns-sub">by town level</div>
+      </div>
+      <div class="top-towns-list">${topRows || '<div class="empty-state">No town data.</div>'}</div>
+    </div>`;
+}
+
+function renderTownCard(t) {
+  const members = memberCount(t);
+  const vuln    = formatVulnWindow(t.vulnerabilityWindow);
+  const wColor  = worldColor(t.world);
+  const level   = Math.round(t.townLevel ?? 0);
+
+  return `
+    <div class="town-card" onclick="openTownModal('${t.id}')">
+      <div class="town-card-header">
+        <div class="town-name">${t.name}</div>
+        <div class="town-badges">
+          ${t.recruiting ? '<span class="badge pos">Recruiting</span>' : ''}
+        </div>
+      </div>
+      <div class="town-level-row">
+        <span class="town-level-label">Level</span>
+        <span class="town-level-num">${level}</span>
+        <div class="town-level-bar-track">
+          <div class="town-level-bar-fill" style="width:${Math.min(100, level)}%;background:${wColor}"></div>
+        </div>
+      </div>
+      <div class="town-stats-grid">
+        <div class="tstat">
+          <span class="tstat-label">Continent</span>
+          <span class="tstat-val tstat-cc">${(t.strength ?? 0).toLocaleString()}</span>
+        </div>
+        <div class="tstat">
+          <span class="tstat-label">Balak</span>
+          <span class="tstat-val tstat-bb">${(t.bbStrength ?? 0).toLocaleString()}</span>
+        </div>
+        <div class="tstat">
+          <span class="tstat-label">Members</span>
+          <span class="tstat-val">${members}</span>
+        </div>
+        <div class="tstat">
+          <span class="tstat-label">Vuln Window</span>
+          <span class="tstat-val tstat-vuln">${vuln}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderContinent(world) {
+  const content  = document.getElementById('townContent');
+  const q        = (document.getElementById('townSearch')?.value ?? '').toLowerCase().trim();
+  const wColor   = worldColor(world);
+  const wName    = worldName(world);
+
+  let towns = allTowns.filter(t => !t.deleted && t.world === world);
+  if (q) towns = towns.filter(t => t.name.toLowerCase().includes(q));
+
+  // Group by alliance
+  const groups = {}; // allianceId → { name, towns[] }
+  const independent = [];
+
+  for (const t of towns) {
+    const ally = townAllianceMap[t.id];
+    if (ally) {
+      if (!groups[ally.id]) groups[ally.id] = { name: ally.name, towns: [] };
+      groups[ally.id].towns.push(t);
+    } else {
+      independent.push(t);
+    }
+  }
+
+  // Sort groups by town count desc, then towns by level desc
+  const sortedGroups = Object.values(groups).sort((a, b) => b.towns.length - a.towns.length);
+  for (const g of sortedGroups) {
+    g.towns.sort((a, b) => (b.townLevel ?? 0) - (a.townLevel ?? 0));
+  }
+  independent.sort((a, b) => (b.townLevel ?? 0) - (a.townLevel ?? 0));
+
+  const totalCount = towns.length;
+
+  const renderGroup = (name, groupTowns) => `
+    <div class="alliance-section">
+      <div class="alliance-section-header">
+        <div class="alliance-section-name">${name}</div>
+        <div class="alliance-section-count">${groupTowns.length} town${groupTowns.length !== 1 ? 's' : ''}</div>
+      </div>
+      <div class="town-card-grid">${groupTowns.map(renderTownCard).join('')}</div>
+    </div>`;
+
+  const groupsHtml = sortedGroups.map(g => renderGroup(g.name, g.towns)).join('');
+  const indepHtml  = independent.length ? renderGroup('Independent', independent) : '';
+
+  const emptyHtml = !towns.length
+    ? '<div class="empty-state">No towns match your search.</div>'
+    : '';
+
+  content.innerHTML = `
+    <div class="continent-view-header">
+      <button class="back-btn" onclick="selectContinent(null)">← Back</button>
+      <div class="continent-view-title" style="color:${wColor}">${wName}</div>
+      <div class="continent-view-count">${totalCount} town${totalCount !== 1 ? 's' : ''}</div>
+    </div>
+    ${emptyHtml || (groupsHtml + indepHtml)}`;
+}
+
+async function openTownModal(id) {
+  const t = allTowns.find(x => x.id === id);
+  if (!t) return;
+
+  const members = memberCount(t);
+  const vuln    = formatVulnWindow(t.vulnerabilityWindow);
+  const wName   = worldName(t.world);
+  const wColor  = worldColor(t.world);
+  const ally    = townAllianceMap[t.id];
+
+  document.getElementById('modalTownName').textContent = t.name;
+  document.getElementById('modalTownWorld').innerHTML  =
+    `<span style="color:${wColor}">${wName}</span>${t.deleted ? ' · <span style="color:#ef4444">Deleted</span>' : ''}`;
+
+  // Build member list with placeholders
+  const memberEntries  = Object.entries(t.members ?? {});
+  const ownerId        = t.owner ?? null;
+
+  // Order: owner first, then subowners, then regular members
+  const ownerEntry    = memberEntries.find(([lid]) => lid === ownerId);
+  const subownerEntries = memberEntries.filter(([lid, v]) => lid !== ownerId && v.subowner);
+  const regularEntries  = memberEntries.filter(([lid, v]) => lid !== ownerId && !v.subowner);
+  const ordered = [
+    ...(ownerEntry ? [ownerEntry] : []),
+    ...subownerEntries,
+    ...regularEntries,
+  ];
+
+  const memberRowsHtml = ordered.map(([lokaId, v]) => {
+    const isOwner    = lokaId === ownerId;
+    const isSubowner = !isOwner && v.subowner;
+    const badge = isOwner
+      ? '<span class="badge pos" style="font-size:10px">Owner</span>'
+      : isSubowner
+        ? '<span class="badge zone" style="font-size:10px">Sub-Owner</span>'
+        : '';
+    return `
+      <div class="modal-member-item" id="mp-${lokaId}">
+        <div class="modal-member-avatar-wrap">
+          <div class="modal-member-placeholder"></div>
+        </div>
+        <span class="modal-member-name" style="color:var(--muted)">${lokaId}</span>
+        ${badge}
+      </div>`;
+  }).join('');
+
+  const memberSection = ordered.length ? `
+    <div class="modal-section">
+      <div class="modal-section-title">Members (${members})</div>
+      <div class="modal-member-list">${memberRowsHtml}</div>
+    </div>` : '';
+
+  document.getElementById('townModalBody').innerHTML = `
+    <div class="modal-stats-grid">
+      <div class="modal-stat">
+        <div class="modal-stat-label">Town Level</div>
+        <div class="modal-stat-val" style="color:var(--accent)">${Math.round(t.townLevel ?? 0)}</div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">Continent</div>
+        <div class="modal-stat-val tstat-cc">${(t.strength ?? 0).toLocaleString()}</div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">Balak</div>
+        <div class="modal-stat-val tstat-bb">${(t.bbStrength ?? 0).toLocaleString()}</div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">Members</div>
+        <div class="modal-stat-val">${members}</div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">Vulnerability Window</div>
+        <div class="modal-stat-val">${vuln}</div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">Recruiting</div>
+        <div class="modal-stat-val">${t.recruiting
+          ? '<span style="color:var(--green)">Yes</span>'
+          : '<span style="color:var(--muted)">No</span>'}</div>
+      </div>
+      ${ally ? `
+      <div class="modal-stat">
+        <div class="modal-stat-label">Alliance</div>
+        <div class="modal-stat-val" style="font-size:15px">${ally.name}</div>
+      </div>` : ''}
+    </div>
+    ${memberSection}
+  `;
+
+  document.getElementById('townModal').style.display = 'flex';
+
+  // Async: fetch player data for each member and update DOM rows
+  if (ordered.length) {
+    const ids = ordered.map(([lid]) => lid);
+
+    async function limitedFetch(fetchIds, fn, limit = 8) {
+      let i = 0;
+      async function worker() {
+        while (i < fetchIds.length) {
+          const idx = i++;
+          const lokaId = fetchIds[idx];
+          const player = await fn(lokaId).catch(() => null);
+          // Update that specific row's avatar and name
+          const row = document.getElementById(`mp-${lokaId}`);
+          if (!row) return;
+          const wrap = row.querySelector('.modal-member-avatar-wrap');
+          const nameEl = row.querySelector('.modal-member-name');
+          if (player && player.uuid) {
+            if (wrap) wrap.innerHTML = `
+              <img class="modal-member-avatar"
+                   src="https://mc-heads.net/avatar/${player.uuid}/28"
+                   onerror="this.src='https://mc-heads.net/avatar/${player.name ?? lokaId}/28'"
+                   alt="">`;
+            if (nameEl) {
+              nameEl.textContent = player.name ?? lokaId;
+              nameEl.style.color = '';
+            }
+          } else {
+            if (wrap) wrap.innerHTML = `<div class="modal-member-placeholder"></div>`;
+            if (nameEl) nameEl.textContent = lokaId;
+          }
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(limit, fetchIds.length) }, worker));
+    }
+
+    limitedFetch(ids, fetchPlayer, 8).catch(() => {});
+  }
+}
+
+function closeTownModal() {
+  document.getElementById('townModal').style.display = 'none';
+}
+
+async function initTowns() {
+  try {
+    const [towns, allianceData] = await Promise.all([
+      fetchPaged(`${LOKA_API}/towns/search/findAll`, 'towns'),
+      fetchPaged(`${LOKA_API}/alliances`, 'alliances'),
+    ]);
+
+    allTowns = towns;
+    buildTownAllianceMap(allianceData);
+
+    selectContinent(null);
+
+    let searchTimer;
+    document.getElementById('townSearch').addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        if (currentContinent) renderContinent(currentContinent);
+      }, 150);
+    });
+
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTownModal(); });
+  } catch (e) {
+    document.getElementById('townContent').innerHTML =
+      '<div class="empty-state">Failed to load town data. Check console for details.</div>';
+    console.error(e);
+  }
+}
+
+/* ── router ──────────────────────────────────────────────────────────────── */
+if      (document.getElementById('itemGrid'))     initIndex();
+else if (document.getElementById('zoneBody'))     initItem();
+else if (document.getElementById('allianceGrid')) initAlliances();
+else if (document.getElementById('townContent'))  initTowns();

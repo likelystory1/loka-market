@@ -80,7 +80,7 @@ def add_headers(resp):
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' https://mc-heads.net data:; "
+        "img-src 'self' https://mc-heads.net https://raw.githubusercontent.com data:; "
         "connect-src 'self'; "
         "frame-ancestors 'none'"
     )
@@ -248,6 +248,18 @@ def index():
 @app.route("/item")
 def item_page():
     return send_from_directory(FRONTEND, "item.html")
+
+@app.route("/alliances")
+def alliances_page():
+    return send_from_directory(FRONTEND, "alliances.html")
+
+@app.route("/towns")
+def towns_page():
+    return send_from_directory(FRONTEND, "towns.html")
+
+@app.route("/market")
+def market_page_route():
+    return send_from_directory(FRONTEND, "market.html")
 
 @app.route("/<path:filename>")
 def static_files(filename):
@@ -445,6 +457,23 @@ def top_players():
 
     _cache_set("players", results)
     return jsonify(results)
+
+# ── proxy: lokamc.com (browser can't call it directly — no CORS headers) ──────
+@app.route("/api/lokamc/<path:path>")
+def loka_proxy(path):
+    qs  = request.query_string.decode()
+    url = f"https://api.lokamc.com/{path}"
+    if qs:
+        url += f"?{qs}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "LokaUtils/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = resp.read()
+        return app.response_class(data, content_type="application/json")
+    except urllib.error.HTTPError as e:
+        return jsonify({"error": str(e)}), e.code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
 
 # ── startup ───────────────────────────────────────────────────────────────────
 ensure_indexes()

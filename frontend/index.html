@@ -3,97 +3,76 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Loka Market</title>
+  <title>Loka Utils</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="hub-page">
 
 <nav class="navbar">
   <div class="nav-brand" onclick="location.href='/'">
     <span class="brand-icon">⛏</span>
-    <span class="brand-text">LOKA MARKET</span>
+    <span class="brand-text">LOKA UTILS</span>
   </div>
   <div class="nav-links">
-    <a href="/" class="nav-link active">Market</a>
+    <a href="/market.html" class="nav-link">Market</a>
+    <a href="/alliances.html" class="nav-link">Alliances</a>
+    <a href="/towns.html" class="nav-link">Towns</a>
   </div>
 </nav>
 
-<div class="stats-strip">
-  <div class="stat-item">
-    <span class="stat-label">Total Trades</span>
-    <span class="stat-value" id="statTrades">—</span>
-  </div>
-  <div class="stat-item">
-    <span class="stat-label">Unique Items</span>
-    <span class="stat-value" id="statItems">—</span>
-  </div>
-  <div class="stat-item">
-    <span class="stat-label">Active Traders</span>
-    <span class="stat-value" id="statTraders">—</span>
+<div class="hub-hero">
+  <div class="hub-hero-inner">
+    <h1 class="hub-title">Your Loka<br><span class="hub-title-accent">Command Center</span></h1>
+    <p class="hub-subtitle">Live market data, alliance intelligence, and settlement info — all in one place.</p>
   </div>
 </div>
 
-<div class="main-content">
-
-  <!-- tabs -->
-  <div class="tabs">
-    <button class="tab active" data-tab="market">All Items</button>
-    <button class="tab" data-tab="recent">Recent Transactions</button>
-    <button class="tab" data-tab="players">Top Spenders</button>
-  </div>
-
-  <!-- market tab -->
-  <div id="tab-market">
-    <div class="controls">
-      <div class="search-wrap">
-        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        <input type="text" id="searchInput" class="search-input" placeholder="Search items...">
-      </div>
-      <div class="sort-controls">
-        <span class="sort-label">Sort:</span>
-        <button class="sort-btn active" data-sort="volume">Popularity</button>
-        <button class="sort-btn" data-sort="fmv">Fair Value</button>
-        <button class="sort-btn" data-sort="name">Name</button>
-      </div>
+<div class="hub-cards">
+  <a href="/market.html" class="hub-card hub-card--market">
+    <div class="hub-card-glow"></div>
+    <div class="hub-card-top">
+      <span class="hub-card-emoji">🏪</span>
+      <span class="hub-card-tag">Market</span>
     </div>
-    <div id="itemGrid" class="item-grid">
-      <div class="loading-state">
-        <div class="spinner"></div>
-        <span>Loading market data…</span>
-      </div>
+    <div class="hub-card-title">Economy Terminal</div>
+    <div class="hub-card-desc">Live prices, fair value zones, trade history and top spender leaderboards for every item on the Loka exchange.</div>
+    <div class="hub-card-footer">
+      <span class="hub-card-link">Browse market →</span>
     </div>
-  </div>
+  </a>
 
-  <!-- recent transactions tab -->
-  <div id="tab-recent" style="display:none">
-    <div id="recentWrap">
-      <div class="loading-state">
-        <div class="spinner"></div>
-        <span>Loading recent trades…</span>
-      </div>
+  <a href="/alliances.html" class="hub-card hub-card--alliances">
+    <div class="hub-card-glow"></div>
+    <div class="hub-card-top">
+      <span class="hub-card-emoji">⚔️</span>
+      <span class="hub-card-tag">Alliances</span>
     </div>
-  </div>
-
-  <!-- top spenders tab -->
-  <div id="tab-players" style="display:none">
-    <div id="playersWrap">
-      <div class="loading-state">
-        <div class="spinner"></div>
-        <span>Loading leaderboard…</span>
-      </div>
+    <div class="hub-card-title">Power Rankings</div>
+    <div class="hub-card-desc">Browse all active alliances, their CC strength, Balak power, vulnerability windows, and every member town.</div>
+    <div class="hub-card-footer">
+      <span class="hub-card-link">View alliances →</span>
     </div>
-  </div>
+  </a>
 
+  <a href="/towns.html" class="hub-card hub-card--towns">
+    <div class="hub-card-glow"></div>
+    <div class="hub-card-top">
+      <span class="hub-card-emoji">🏰</span>
+      <span class="hub-card-tag">Towns</span>
+    </div>
+    <div class="hub-card-title">Settlement Atlas</div>
+    <div class="hub-card-desc">Explore every town across Kalros, Ascalon, and Garama. Filter by continent, sort by level, and find recruiting towns.</div>
+    <div class="hub-card-footer">
+      <span class="hub-card-link">Explore towns →</span>
+    </div>
+  </a>
 </div>
 
 <footer class="footer">
-  Loka Market &nbsp;•&nbsp; Economy data from <a href="https://lokamc.com" target="_blank">LokaMinecraft</a>
+  Loka Utils &nbsp;•&nbsp; Data from <a href="https://lokamc.com" target="_blank">LokaMinecraft</a>
 </footer>
 
-<script src="app.js"></script>
 </body>
 </html>

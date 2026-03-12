@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Towns — Loka Utils</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-brand" onclick="location.href='/'">
+    <span class="brand-icon">⛏</span>
+    <span class="brand-text">LOKA UTILS</span>
+  </div>
+  <div class="nav-links">
+    <a href="/" class="nav-link">Home</a>
+    <a href="/market.html" class="nav-link">Market</a>
+    <a href="/alliances.html" class="nav-link">Alliances</a>
+    <a href="/towns.html" class="nav-link active">Towns</a>
+  </div>
+</nav>
+
+<div class="page-header page-header--towns">
+  <div class="page-header-inner">
+    <h1 class="page-title"><span class="page-title-icon">🏰</span> Towns</h1>
+    <p class="page-subtitle">Explore settlements across Kalros, Ascalon &amp; Garama</p>
+  </div>
+</div>
+
+<div class="main-content">
+  <div id="townSearchBar" class="controls town-search-bar" style="display:none">
+    <div class="search-wrap">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" id="townSearch" class="search-input" placeholder="Search towns…">
+    </div>
+  </div>
+  <div id="townContent" class="town-content">
+    <div class="loading-state"><div class="spinner spinner--teal"></div><span>Loading towns…</span></div>
+  </div>
+</div>
+
+<div id="townModal" class="modal" style="display:none">
+  <div class="modal-backdrop" onclick="closeTownModal()"></div>
+  <div class="modal-box">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalTownName">—</div>
+        <div class="modal-subtitle" id="modalTownWorld">—</div>
+      </div>
+      <button class="modal-close" onclick="closeTownModal()">✕</button>
+    </div>
+    <div class="modal-body" id="townModalBody"></div>
+  </div>
+</div>
+
+<footer class="footer">
+  Loka Utils &nbsp;•&nbsp; Data from <a href="https://api.lokamc.com" target="_blank">Loka API</a>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
