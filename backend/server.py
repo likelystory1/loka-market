@@ -458,9 +458,81 @@ def top_players():
     _cache_set("players", results)
     return jsonify(results)
 
+# ── loka data cache (file-backed, refreshed every 5 min) ─────────────────────
+LOKA_CACHE_DIR       = os.path.join(BASE_DIR, "cache")
+LOKA_CACHE_ALLIANCES = os.path.join(LOKA_CACHE_DIR, "alliances.json")
+LOKA_CACHE_TOWNS     = os.path.join(LOKA_CACHE_DIR, "towns.json")
+LOKA_CACHE_INTERVAL  = 300   # seconds
+_loka_lock           = threading.Lock()
+
+os.makedirs(LOKA_CACHE_DIR, exist_ok=True)
+
+def _loka_fetch_all(base_url, embedded_key):
+    """Fetch every page from a Loka API endpoint and return the combined list."""
+    results = []
+    page    = 0
+    while True:
+        sep = "&" if "?" in base_url else "?"
+        url = f"{base_url}{sep}size=100&page={page}"
+        req = urllib.request.Request(url, headers={"User-Agent": "LokaUtils/1.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+        items = data.get("_embedded", {}).get(embedded_key, [])
+        results.extend(items)
+        pg = data.get("page", {})
+        if not items or page >= pg.get("totalPages", 1) - 1:
+            break
+        page += 1
+    return results
+
+def _write_cache_file(path, items, embedded_key):
+    """Write items as a single-page Loka-style response (atomic via tmp file)."""
+    payload = {
+        "_embedded": {embedded_key: items},
+        "page": {"size": len(items), "totalElements": len(items),
+                 "totalPages": 1, "number": 0},
+    }
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(payload, f)
+    os.replace(tmp, path)   # atomic on Linux
+
+def _refresh_loka_cache():
+    for label, url, key, path in [
+        ("alliances", "https://api.lokamc.com/alliances",              "alliances", LOKA_CACHE_ALLIANCES),
+        ("towns",     "https://api.lokamc.com/towns/search/findAll",   "towns",     LOKA_CACHE_TOWNS),
+    ]:
+        try:
+            items = _loka_fetch_all(url, key)
+            with _loka_lock:
+                _write_cache_file(path, items, key)
+            print(f"[loka-cache] {len(items)} {label} cached")
+        except Exception as e:
+            print(f"[loka-cache] {label} error: {e}")
+
+def _loka_cache_loop():
+    _refresh_loka_cache()          # populate immediately on startup
+    while True:
+        time.sleep(LOKA_CACHE_INTERVAL)
+        _refresh_loka_cache()
+
 # ── proxy: lokamc.com (browser can't call it directly — no CORS headers) ──────
 @app.route("/api/lokamc/<path:path>")
 def loka_proxy(path):
+    # Serve alliances + towns from the file cache
+    cache_file = None
+    if path == "alliances":
+        cache_file = LOKA_CACHE_ALLIANCES
+    elif path == "towns/search/findAll":
+        cache_file = LOKA_CACHE_TOWNS
+
+    if cache_file and os.path.exists(cache_file):
+        with _loka_lock:
+            with open(cache_file) as f:
+                body = f.read()
+        return app.response_class(body, content_type="application/json")
+
+    # Pass-through for player lookups and anything not yet cached
     qs  = request.query_string.decode()
     url = f"https://api.lokamc.com/{path}"
     if qs:
@@ -477,7 +549,8 @@ def loka_proxy(path):
 
 # ── startup ───────────────────────────────────────────────────────────────────
 ensure_indexes()
-threading.Thread(target=_warmup, daemon=True).start()
+threading.Thread(target=_warmup,           daemon=True).start()
+threading.Thread(target=_loka_cache_loop,  daemon=True).start()
 
 if __name__ == "__main__":
     # For local dev only — production uses gunicorn (see gunicorn.conf.py)
