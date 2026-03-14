@@ -1936,14 +1936,17 @@ function setLbSort(sort, btn) {
   _lbSort = sort;
   document.querySelectorAll('.ps-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  // If we already have cached HTML for this sort, show it instantly
+  const lb = document.getElementById('playerLb');
+  // Cached — instant render, no network needed
   if (_lbCache[sort]) {
-    document.getElementById('playerLb').innerHTML = _lbCache[sort];
+    lb.innerHTML = _lbCache[sort];
     return;
   }
-  // Debounce rapid clicks on the same uncached tab
+  // Show skeleton immediately so the UI feels responsive
+  lb.innerHTML = _lbSkeleton(12);
+  // Debounce in case of rapid tab-flicking, but keep skeleton visible
   clearTimeout(_lbDebounce);
-  _lbDebounce = setTimeout(() => loadLeaderboard(), 150);
+  _lbDebounce = setTimeout(() => loadLeaderboard(), 100);
 }
 
 function _lbSkeleton(n = 10) {
@@ -1971,7 +1974,6 @@ async function loadLeaderboard() {
   if (!lb) return;
   if (_lbFetching[sort]) return;   // already in-flight for this sort
   _lbFetching[sort] = true;
-  lb.innerHTML = _lbSkeleton(12);
   try {
     const rows = await fetch(`/api/eldritch/leaderboard?sort=${sort}&limit=50`).then(r => r.json());
     if (!rows.length) {
@@ -1992,22 +1994,21 @@ async function loadLeaderboard() {
       const kdRaw = p.kd_ratio ?? (p.deaths ? (p.kills / p.deaths) : p.kills);
       const kd = Number(kdRaw).toFixed(2);
       const kdCls = _kdClass(kd);
-      const sortVal = (isKda || isKdaWorst) ? kd : (p[_lbSort] ?? p.kills);
-      const sortLabel = {
-        kills:'Kills', assists:'Assists', kda:'K/D', kda_worst:'K/D',
-        conquest_wins:'Wins', charges:'Charges',
-      }[_lbSort] || 'Kills';
+      // Charges: main stat = "lamps / golems", right col = completion %
+      let sortVal, sortLabel, rightCol;
+      if (isCharges) {
+        const rate   = p.charge_rate != null ? (p.charge_rate * 100).toFixed(1) : '—';
+        sortVal      = `${(p.lamps ?? 0).toLocaleString()} / ${(p.golems ?? 0).toLocaleString()}`;
+        sortLabel    = 'Charges / Golems';
+        rightCol     = `<span class="plb-kd" title="Charge completion rate">${rate}%</span>`;
+      } else {
+        sortVal   = (isKda || isKdaWorst) ? kd : (p[_lbSort] ?? p.kills);
+        sortLabel = { kills:'Kills', assists:'Assists', kda:'K/D', kda_worst:'K/D', conquest_wins:'Wins' }[_lbSort] || 'Kills';
+        rightCol  = `<span class="plb-kd ${kdCls}" title="K/D">${kd}</span>`;
+      }
+
       // Worst K/D gets no glory effects — plain rows only
       const rankCls = isKdaWorst ? '' : (i === 0 ? 'plb-row--gold' : i === 1 ? 'plb-row--silver' : i === 2 ? 'plb-row--bronze' : i < 10 ? 'plb-row--elite' : '');
-
-      // Charges tab: show charge rate % instead of K/D
-      const rightCol = isCharges
-        ? (() => {
-            const rate = p.charge_rate != null ? (p.charge_rate * 100).toFixed(1) : '—';
-            const golems = p.golems ?? 0;
-            return `<span class="plb-kd" title="Charge completion rate">${rate}%<span class="plb-stat-label"> / ${golems} golems</span></span>`;
-          })()
-        : `<span class="plb-kd ${kdCls}" title="K/D">${kd}</span>`;
 
       return `<div class="plb-row ${rankCls}" onclick="showPlayerCard('${p.uuid}')">
         <span class="plb-rank">#${i + 1}</span>
@@ -2016,7 +2017,7 @@ async function loadLeaderboard() {
           <div class="plb-name">${p.name}</div>
           ${p.alliance ? `<div class="plb-sub">${p.alliance}</div>` : ''}
         </div>
-        <span class="plb-stat"><span class="plb-stat-val">${isKda ? sortVal : (sortVal?.toLocaleString?.() ?? sortVal)}</span><span class="plb-stat-label">${sortLabel}</span></span>
+        <span class="plb-stat"><span class="plb-stat-val">${isCharges || isKda || isKdaWorst ? sortVal : (sortVal?.toLocaleString?.() ?? sortVal)}</span><span class="plb-stat-label">${sortLabel}</span></span>
         ${rightCol}
       </div>`;
     }).join('');
