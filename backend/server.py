@@ -144,10 +144,11 @@ def add_headers(resp):
     return resp
 
 # ── UUID → username resolution ────────────────────────────────────────────────
-_UUID_CACHE: dict    = {}   # uuid -> resolved username (or '' if failed)
+_UUID_CACHE: dict    = {}   # uuid/objectid -> resolved username (or '' if failed)
 _UUID_LOCK           = threading.Lock()
 _STD_UUID_RE         = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
 _NO_DASH_UUID_RE     = re.compile(r'^[0-9a-f]{32}$', re.I)
+_MONGO_OID_RE        = re.compile(r'^[0-9a-f]{24}$', re.I)
 
 def _normalise_uuid(uid: str) -> str:
     """Return UUID in 8-4-4-4-12 dashed format, or the original string if not parseable."""
@@ -159,6 +160,47 @@ def _normalise_uuid(uid: str) -> str:
 def _is_minecraft_uuid(uid: str) -> bool:
     """True for both dashed and undashed 32-hex UUIDs."""
     return bool(uid and (_STD_UUID_RE.match(uid) or _NO_DASH_UUID_RE.match(uid.replace('-', ''))))
+
+def _fetch_loka_objectid(oid: str) -> tuple[str, str, str]:
+    """Resolve a Loka MongoDB ObjectID via api.lokamc.com.
+    Returns (oid, username, minecraft_uuid)."""
+    try:
+        req = urllib.request.Request(
+            f"https://api.lokamc.com/players/{oid}",
+            headers={"User-Agent": "LokaMarket/1.0"})
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read())
+            return oid, data.get("name", ""), data.get("uuid", "")
+    except Exception:
+        return oid, "", ""
+
+# oid -> (name, mc_uuid)
+_OID_CACHE: dict[str, tuple[str, str]] = {}
+
+def resolve_loka_objectids(oids: list[str]) -> dict[str, tuple[str, str]]:
+    """Resolve Loka MongoDB ObjectIDs to (name, mc_uuid). Caches results."""
+    result: dict[str, tuple[str, str]] = {}
+    to_fetch: list[str] = []
+
+    for oid in oids:
+        with _UUID_LOCK:
+            if oid in _OID_CACHE:
+                result[oid] = _OID_CACHE[oid]
+                continue
+        to_fetch.append(oid)
+
+    if to_fetch:
+        workers = min(10, len(to_fetch))
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futures = {ex.submit(_fetch_loka_objectid, oid): oid for oid in to_fetch}
+            for fut in as_completed(futures):
+                oid, name, mc_uuid = fut.result()
+                entry = (name, mc_uuid)
+                with _UUID_LOCK:
+                    _OID_CACHE[oid] = entry
+                result[oid] = entry
+
+    return result
 
 def _lookup_loka_db(uuids: list[str]) -> dict[str, str]:
     """Bulk-resolve UUIDs from loka.db (current Loka player names). Returns uuid→name."""
@@ -784,13 +826,30 @@ def top_sellers():
         if row["seller_uuid"] not in fav_item:
             fav_item[row["seller_uuid"]] = row["item"]
 
-    names = resolve_uuids(uuids)
+    # seller_uuid is a Loka MongoDB ObjectID (24-char hex), not a Minecraft UUID
+    oid_ids = [u for u in uuids if _MONGO_OID_RE.match(u)]
+    mc_ids  = [u for u in uuids if not _MONGO_OID_RE.match(u)]
+
+    oid_resolved: dict[str, tuple[str, str]] = resolve_loka_objectids(oid_ids) if oid_ids else {}
+    mc_names: dict[str, str]                 = resolve_uuids(mc_ids) if mc_ids else {}
+
+    def _seller_name(uid: str) -> str:
+        if uid in oid_resolved:
+            name, _ = oid_resolved[uid]
+            return name if name else uid[:8] + "…"
+        return mc_names.get(uid, uid[:8] + "…")
+
+    def _seller_mc_uuid(uid: str) -> str:
+        if uid in oid_resolved:
+            _, mc_uuid = oid_resolved[uid]
+            return mc_uuid if mc_uuid else uid
+        return uid
 
     results = [
         {
             "rank":         i + 1,
-            "uuid":         uid,
-            "name":         names.get(uid, uid[:8] + "…"),
+            "uuid":         _seller_mc_uuid(uid),
+            "name":         _seller_name(uid),
             "total_earned": round(s["total_earned"], 2),
             "trade_count":  s["trade_count"],
             "fav_item":     fav_item.get(uid),
