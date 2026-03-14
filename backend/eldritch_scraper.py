@@ -459,6 +459,16 @@ def get_leaderboard(sort='kills', limit=50) -> list:
         ).fetchall()
         db.close()
         return [dict(r) for r in rows]
+    if sort == 'charges':
+        rows = db.execute(
+            '''SELECT *,
+               CAST(lamps AS REAL) / CASE WHEN golems = 0 THEN 1 ELSE golems END AS charge_rate
+               FROM player_stats WHERE error IS NULL AND name != "" AND lamps >= 1
+               ORDER BY lamps DESC LIMIT ?''',
+            (limit,)
+        ).fetchall()
+        db.close()
+        return [dict(r) for r in rows]
     col = sort if sort in valid else 'kills'
     rows = db.execute(
         f'SELECT * FROM player_stats WHERE error IS NULL AND name != "" ORDER BY {col} DESC LIMIT ?',
