@@ -147,13 +147,46 @@ def add_headers(resp):
 _UUID_CACHE: dict    = {}   # uuid -> resolved username (or '' if failed)
 _UUID_LOCK           = threading.Lock()
 _STD_UUID_RE         = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
+_NO_DASH_UUID_RE     = re.compile(r'^[0-9a-f]{32}$', re.I)
 
-def _is_standard_uuid(uid: str) -> bool:
-    """Standard Minecraft UUID has dashes (8-4-4-4-12 format)."""
-    return bool(uid and _STD_UUID_RE.match(uid))
+def _normalise_uuid(uid: str) -> str:
+    """Return UUID in 8-4-4-4-12 dashed format, or the original string if not parseable."""
+    clean = uid.replace('-', '')
+    if len(clean) == 32 and _NO_DASH_UUID_RE.match(clean):
+        return f"{clean[0:8]}-{clean[8:12]}-{clean[12:16]}-{clean[16:20]}-{clean[20:32]}"
+    return uid
+
+def _is_minecraft_uuid(uid: str) -> bool:
+    """True for both dashed and undashed 32-hex UUIDs."""
+    return bool(uid and (_STD_UUID_RE.match(uid) or _NO_DASH_UUID_RE.match(uid.replace('-', ''))))
+
+def _lookup_loka_db(uuids: list[str]) -> dict[str, str]:
+    """Bulk-resolve UUIDs from loka.db (current Loka player names). Returns uuid→name."""
+    try:
+        from eldritch_scraper import LOKA_PATH
+        import sqlite3 as _sq
+        # Normalise to dashed format for lookup (loka.db stores without dashes; handle both)
+        normalised = {_normalise_uuid(u): u for u in uuids}
+        stripped   = {u.replace('-', ''): u for u in uuids}
+        placeholders = ','.join('?' * len(uuids))
+        db   = _sq.connect(LOKA_PATH)
+        # loka_players.uuid may be stored without dashes
+        rows = db.execute(
+            f'SELECT uuid, name FROM loka_players WHERE uuid IN ({placeholders}) AND name != ""',
+            list(stripped.keys())
+        ).fetchall()
+        db.close()
+        out = {}
+        for uuid_raw, name in rows:
+            orig = stripped.get(uuid_raw) or normalised.get(uuid_raw)
+            if orig:
+                out[orig] = name
+        return out
+    except Exception:
+        return {}
 
 def _fetch_one_uuid(uid: str) -> tuple[str, str]:
-    """Returns (uuid, username). Username is '' on failure."""
+    """Returns (uuid, username) via Mojang sessionserver. Username is '' on failure."""
     clean = uid.replace('-', '')
     url   = f"https://sessionserver.mojang.com/session/minecraft/profile/{clean}"
     try:
@@ -165,7 +198,7 @@ def _fetch_one_uuid(uid: str) -> tuple[str, str]:
         return uid, ""
 
 def _db_write_names(pairs: list[tuple[str, str]]):
-    """Persist resolved names to DB so they survive restarts."""
+    """Persist resolved names to market DB so they survive restarts."""
     try:
         conn = sqlite3.connect(DB_PATH)
         for uid, name in pairs:
@@ -182,44 +215,58 @@ def _db_write_names(pairs: list[tuple[str, str]]):
 
 def resolve_uuids(uuids: list[str]) -> dict[str, str]:
     """
-    Resolve a list of UUIDs to display names.
-    Standard-format UUIDs  → Mojang API lookup (parallel, cached).
-    Non-standard (Loka)   → truncated hex shown as-is.
-    Returns dict: uuid → display_name.
+    Resolve UUIDs to current display names.
+    Priority: in-memory cache → loka.db (86k players, always current) → Mojang API.
+    Handles both dashed and undashed UUID formats.
     """
     result: dict[str, str] = {}
-    to_fetch: list[str]    = []
+    to_resolve: list[str]  = []
 
     for uid in uuids:
         if not uid:
             result[uid] = "Unknown"
             continue
-        if not _is_standard_uuid(uid):
-            # Loka-specific short ID — show first 8 chars
+        if not _is_minecraft_uuid(uid):
             result[uid] = uid[:8] + "…"
             continue
         with _UUID_LOCK:
             if uid in _UUID_CACHE:
                 result[uid] = _UUID_CACHE[uid] or (uid[:8] + "…")
                 continue
-        to_fetch.append(uid)
+        to_resolve.append(uid)
 
-    if to_fetch:
-        workers = min(10, len(to_fetch))
+    if not to_resolve:
+        return result
+
+    # 1) Bulk-resolve from loka.db (fast, covers all 86k Loka players with current names)
+    loka_hits = _lookup_loka_db(to_resolve)
+    still_missing = []
+    for uid in to_resolve:
+        if uid in loka_hits:
+            name = loka_hits[uid]
+            with _UUID_LOCK:
+                _UUID_CACHE[uid] = name
+            result[uid] = name
+        else:
+            still_missing.append(uid)
+
+    # 2) Fall back to Mojang API for any not found in loka.db
+    if still_missing:
+        workers = min(10, len(still_missing))
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            futures = {ex.submit(_fetch_one_uuid, u): u for u in to_fetch}
+            futures = {ex.submit(_fetch_one_uuid, u): u for u in still_missing}
             for fut in as_completed(futures, timeout=8):
                 try:
                     uid, name = fut.result()
                     with _UUID_LOCK:
                         _UUID_CACHE[uid] = name
                     result[uid] = name if name else (uid[:8] + "…")
-                except Exception as e:
+                except Exception:
                     uid = futures[fut]
                     result[uid] = uid[:8] + "…"
 
-        # Persist to DB in background
-        pairs = [(u, _UUID_CACHE.get(u, "")) for u in to_fetch if _UUID_CACHE.get(u)]
+        # Persist newly resolved names to market DB in background
+        pairs = [(u, _UUID_CACHE.get(u, "")) for u in still_missing if _UUID_CACHE.get(u)]
         if pairs:
             threading.Thread(target=_db_write_names, args=(pairs,), daemon=True).start()
 
@@ -898,13 +945,19 @@ def api_eldritch_player(identifier):
         data = fetch_player(uuid)
         if data.get('error') == 'not_found':
             return jsonify({'error': 'Player has no EldritchBot record'}), 404
-        return jsonify(data)
     except Exception as e:
         # Fall back to cache if live fetch fails
-        cached = get_player(uuid)
-        if cached:
-            return jsonify(cached)
-        return jsonify({'error': str(e)}), 502
+        data = get_player(uuid)
+        if not data:
+            return jsonify({'error': str(e)}), 502
+
+    # Resolve nemesis name → UUID so the frontend can link by UUID (survives name changes)
+    if data.get('nemesis'):
+        nem_uuid = name_to_uuid(data['nemesis'])
+        if nem_uuid:
+            data['nemesis_uuid'] = nem_uuid
+
+    return jsonify(data)
 
 def _eldritch_init():
     """
