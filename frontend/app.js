@@ -11,9 +11,18 @@ function formatPrice(n) {
   return Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
+const BLOCK_TEXTURE_ITEMS = new Set([
+  'shulker_box','white_shulker_box','orange_shulker_box','magenta_shulker_box',
+  'light_blue_shulker_box','yellow_shulker_box','lime_shulker_box','pink_shulker_box',
+  'gray_shulker_box','light_gray_shulker_box','cyan_shulker_box','purple_shulker_box',
+  'blue_shulker_box','brown_shulker_box','green_shulker_box','red_shulker_box',
+  'black_shulker_box',
+]);
+
 function iconUrl(name) {
-  const slug = name.toLowerCase().replace(/ /g, '_');
-  return `https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21.11/assets/minecraft/textures/item/${slug}.png`;
+  const slug   = name.toLowerCase().replace(/ /g, '_');
+  const folder = BLOCK_TEXTURE_ITEMS.has(slug) ? 'block' : 'item';
+  return `https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21.4/assets/minecraft/textures/${folder}/${slug}.png`;
 }
 
 function avatarUrl(uid) {
@@ -512,6 +521,17 @@ function allianceRanked() {
   return [...allAlliances].sort((a, b) => (b.strength ?? 0) - (a.strength ?? 0));
 }
 
+/* Returns the world ('north'|'west'|'south'|null) where the alliance has the most towns */
+function alliancePrimaryWorld(a) {
+  const counts = { north: 0, west: 0, south: 0 };
+  for (const tid of a.townIds ?? []) {
+    const t = allTownsMap[tid];
+    if (t && !t.deleted && counts[t.world] !== undefined) counts[t.world]++;
+  }
+  const best = Object.entries(counts).sort((x, y) => y[1] - x[1])[0];
+  return best && best[1] > 0 ? best[0] : null;
+}
+
 /* Compute champion for each continent + balak */
 function computeChampions() {
   const worlds = ['north', 'west', 'south'];
@@ -590,20 +610,30 @@ function renderAlliances() {
   const q    = (document.getElementById('allianceSearch')?.value ?? '').toLowerCase().trim();
 
   const ranked = allianceRanked();
-
-  let list = ranked.filter(a => !q || a.name.toLowerCase().includes(q));
+  const list   = ranked.filter(a => !q || a.name.toLowerCase().includes(q));
 
   if (!list.length) {
     grid.innerHTML = '<div class="empty-state">No alliances found.</div>';
     return;
   }
 
-  grid.innerHTML = list.map(a => {
+  // Group by primary continent, sorted by strength within each group
+  const CONTINENT_ORDER = ['north', 'west', 'south', null];
+  const groups = {};
+  for (const w of CONTINENT_ORDER) groups[w] = [];
+  for (const a of list) {
+    const w = alliancePrimaryWorld(a);
+    groups[w in groups ? w : null].push(a);
+  }
+
+  const cardHtml = (a) => {
     const rank      = ranked.findIndex(x => x.id === a.id) + 1;
     const color     = rankColor(rank);
     const townCount = a.townIds?.length ?? 0;
     const vuln      = formatVulnWindow(a.vulnerabilityWindow);
-
+    const world     = alliancePrimaryWorld(a);
+    const wName     = worldName(world);
+    const wColor    = worldColor(world);
     return `
       <div class="alliance-card" style="--a-color:${color}" onclick="openAllianceModal('${a.id}')">
         <div class="alliance-card-left">
@@ -613,7 +643,7 @@ function renderAlliances() {
             <div class="alliance-name">${a.name}</div>
             <div class="alliance-meta-row">
               <div class="ameta-item">
-                <span class="ameta-label">Continent</span>
+                <span class="ameta-label">Strength</span>
                 <span class="ameta-val" style="color:${color}">${(a.strength ?? 0).toLocaleString()}</span>
               </div>
               <div class="ameta-item">
@@ -633,7 +663,22 @@ function renderAlliances() {
         </div>
         <div class="alliance-chevron">›</div>
       </div>`;
-  }).join('');
+  };
+
+  const sections = CONTINENT_ORDER
+    .filter(w => groups[w].length)
+    .map(w => {
+      const label = w ? `${worldName(w)}` : 'Other';
+      const icon  = w === 'north' ? '🌿' : w === 'west' ? '⚔️' : w === 'south' ? '🔥' : '🌐';
+      const color = worldColor(w);
+      return `
+        <div class="continent-rankings-group">
+          <div class="continent-rankings-header" style="color:${color}">${icon} ${label}</div>
+          ${groups[w].map(cardHtml).join('')}
+        </div>`;
+    });
+
+  grid.innerHTML = sections.join('');
 }
 
 function openAllianceModal(id) {
@@ -804,9 +849,9 @@ function renderTownHub() {
   const westCount  = liveTowns.filter(t => t.world === 'west').length;
   const southCount = liveTowns.filter(t => t.world === 'south').length;
 
-  // Top 10 by townLevel
+  // Top 10 by player count
   const top10 = [...liveTowns]
-    .sort((a, b) => (b.townLevel ?? 0) - (a.townLevel ?? 0))
+    .sort((a, b) => memberCount(b) - memberCount(a))
     .slice(0, 10);
 
   const topRows = top10.map((t, i) => {
@@ -826,7 +871,7 @@ function renderTownHub() {
         </div>
         <div class="top-town-stats">
           <span class="top-town-world" style="color:${wColor}">${wName}</span>
-          <span class="top-town-level">Lv.${level}</span>
+          <span class="top-town-level">${memberCount(t)} players</span>
         </div>
       </div>`;
   }).join('');
@@ -858,7 +903,7 @@ function renderTownHub() {
     <div class="top-towns-section">
       <div class="top-towns-header">
         <div class="top-towns-title">🏆 Top Towns on Loka</div>
-        <div class="top-towns-sub">by town level</div>
+        <div class="top-towns-sub">by player count</div>
       </div>
       <div class="top-towns-list">${topRows || '<div class="empty-state">No town data.</div>'}</div>
     </div>`;
