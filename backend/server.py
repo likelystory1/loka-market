@@ -448,7 +448,7 @@ def recent_trades():
     rows = conn.execute("""
         SELECT item, price, buyer_uuid, seller_uuid, ts
         FROM trades
-        ORDER BY ts DESC, rowid DESC
+        ORDER BY rowid DESC
         LIMIT 100
     """).fetchall()
     conn.close()
