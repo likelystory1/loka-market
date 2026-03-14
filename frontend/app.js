@@ -1878,30 +1878,57 @@ function setLbSort(sort, btn) {
   loadLeaderboard();
 }
 
+function _lbSkeleton(n = 10) {
+  return Array.from({length: n}, () => `
+    <div class="plb-skeleton">
+      <div class="plb-skel-block sm" style="width:28px"></div>
+      <div class="plb-skel-block circle"></div>
+      <div class="plb-skel-block" style="width:55%;max-width:130px"></div>
+      <div class="plb-skel-block" style="width:60%;justify-self:end"></div>
+      <div class="plb-skel-block sm" style="width:38px;justify-self:end"></div>
+    </div>`).join('');
+}
+
+function _kdClass(kd) {
+  const v = parseFloat(kd);
+  if (isNaN(v)) return 'kd-good';
+  if (v > 10)   return 'kd-legendary';
+  if (v >= 1)   return 'kd-good';
+  return 'kd-bad';
+}
+
 async function loadLeaderboard() {
   const lb = document.getElementById('playerLb');
   if (!lb) return;
+  lb.innerHTML = _lbSkeleton(12);
   try {
     const rows = await fetch(`/api/eldritch/leaderboard?sort=${_lbSort}&limit=50`).then(r => r.json());
     if (!rows.length) {
       lb.innerHTML = '<div class="players-lb-loading">No data yet — search a player to add them.</div>';
       return;
     }
-    lb.innerHTML = rows.map((p, i) => {
-      const kd = p.deaths ? (p.kills / p.deaths).toFixed(2) : p.kills.toFixed(2);
+    const header = _lbSort === 'kda'
+      ? '<div class="plb-filter-note">Minimum 50 kills required · sorted by K/D ratio</div>'
+      : '';
+    lb.innerHTML = header + rows.map((p, i) => {
+      const kdRaw = p.kd_ratio ?? (p.deaths ? (p.kills / p.deaths) : p.kills);
+      const kd = Number(kdRaw).toFixed(2);
+      const kdCls = _kdClass(kd);
       const isKda = _lbSort === 'kda';
       const sortVal = isKda ? kd : (p[_lbSort] ?? p.kills);
       const sortLabel = {
         kills:'Kills', assists:'Assists', kda:'K/D', conquest_wins:'Wins',
-        golems:'Golems', potions:'Potions',
       }[_lbSort] || 'Kills';
-      return `<div class="plb-row" onclick="showPlayerCard('${p.uuid}')">
+      const rankCls = i === 0 ? 'plb-row--gold' : i === 1 ? 'plb-row--silver' : i === 2 ? 'plb-row--bronze' : i < 10 ? 'plb-row--elite' : '';
+      return `<div class="plb-row ${rankCls}" onclick="showPlayerCard('${p.uuid}')">
         <span class="plb-rank">#${i + 1}</span>
-        <img class="plb-head" src="https://mc-heads.net/avatar/${p.name}/24" alt="">
-        <span class="plb-name">${p.name}</span>
-        <span class="plb-alliance">${p.alliance || ''}</span>
+        <img class="plb-head" src="https://mc-heads.net/avatar/${p.name}/36" alt="">
+        <div class="plb-name-col">
+          <div class="plb-name">${p.name}</div>
+          ${p.alliance ? `<div class="plb-sub">${p.alliance}</div>` : ''}
+        </div>
         <span class="plb-stat"><span class="plb-stat-val">${isKda ? sortVal : (sortVal?.toLocaleString?.() ?? sortVal)}</span><span class="plb-stat-label">${sortLabel}</span></span>
-        ${!isKda ? `<span class="plb-kd" title="K/D">${kd}</span>` : ''}
+        <span class="plb-kd ${kdCls}" title="K/D">${kd}</span>
       </div>`;
     }).join('');
   } catch {
@@ -1915,38 +1942,47 @@ function _statRow(label, val) {
 }
 
 function renderPlayerCard(p) {
-  const card = document.getElementById('playerCard');
+  const card  = document.getElementById('playerCard');
+  const empty = document.getElementById('playerCardEmpty');
   if (!card) return;
-  const kd = p.deaths ? (p.kills / p.deaths).toFixed(2) : '∞';
-  const ratio = p.conquest_wins + p.conquest_losses
+
+  const kdRaw = p.deaths ? (p.kills / p.deaths) : p.kills;
+  const kd    = p.deaths ? kdRaw.toFixed(2) : '∞';
+  const kdCls = _kdClass(kd);
+  const ratio = (p.conquest_wins + p.conquest_losses)
     ? ((p.conquest_wins / (p.conquest_wins + p.conquest_losses)) * 100).toFixed(0) + '%'
     : '—';
+  const avatarUrl = `https://mc-heads.net/head/${p.name}/80`;
+
   card.innerHTML = `
-    <div class="pc-main">
-      <img class="pc-avatar" src="https://mc-heads.net/head/${p.name}/64" alt="${p.name}">
+    <div class="pc-hero" style="--pc-bg: url('${avatarUrl}')">
+      <img class="pc-avatar" src="${avatarUrl}" alt="${p.name}">
       <div class="pc-info">
         <div class="pc-name">${p.name}</div>
-        <div class="pc-alliance">${p.alliance || ''}</div>
+        ${p.alliance ? `<div class="pc-alliance">${p.alliance}</div>` : ''}
         ${p.last_fight ? `<div class="pc-last-fight">Last fight: ${p.last_fight}</div>` : ''}
       </div>
       <div class="pc-kda-block">
-        <span class="pc-kda-k" title="Kills">${p.kills.toLocaleString()}</span>
-        <span class="pc-kda-sep">/</span>
-        <span class="pc-kda-d" title="Deaths">${p.deaths.toLocaleString()}</span>
-        <span class="pc-kda-sep">/</span>
-        <span class="pc-kda-a" title="Assists">${p.assists.toLocaleString()}</span>
-        <div class="pc-kd-label">K / D / A &nbsp;·&nbsp; ${kd} K/D</div>
+        <div class="pc-kda-nums">
+          <span class="pc-kda-k" title="Kills">${p.kills.toLocaleString()}</span>
+          <span class="pc-kda-sep">/</span>
+          <span class="pc-kda-d" title="Deaths">${p.deaths.toLocaleString()}</span>
+          <span class="pc-kda-sep">/</span>
+          <span class="pc-kda-a" title="Assists">${p.assists.toLocaleString()}</span>
+        </div>
+        <div class="pc-kd-label-row">Kills / Deaths / Assists</div>
+        <div class="pc-kd-ratio ${kdCls}">${kd} K/D</div>
       </div>
     </div>
     <div class="pc-sections">
       <div class="pc-section">
-        <div class="pc-section-title">Combat</div>
+        <div class="pc-section-title">⚔ Combat</div>
         ${_statRow('Kills', p.kills)}
         ${_statRow('Deaths', p.deaths)}
         ${_statRow('Assists', p.assists)}
       </div>
       <div class="pc-section">
-        <div class="pc-section-title">Conquest</div>
+        <div class="pc-section-title">🏰 Conquest</div>
         ${_statRow('Wins', p.conquest_wins)}
         ${_statRow('Losses', p.conquest_losses)}
         <div class="pc-stat-row"><span class="pc-stat-label">Win Rate</span><span class="pc-stat-val">${ratio}</span></div>
@@ -1956,33 +1992,54 @@ function renderPlayerCard(p) {
         ${_statRow('Close Calls', p.close_calls)}
       </div>
       <div class="pc-section">
-        <div class="pc-section-title">Consumables</div>
+        <div class="pc-section-title">🧪 Consumables</div>
         ${_statRow('Potions', p.potions)}
         ${_statRow('Pearls', p.pearls)}
         ${_statRow('Food', p.food)}
         ${_statRow('Ancient Ingots', p.ancient_ingots)}
       </div>
-      ${p.nemesis ? `<div class="pc-section pc-section--nemesis">
-        <div class="pc-section-title">Nemesis</div>
-        <div class="pc-nemesis-name"><img src="https://mc-heads.net/avatar/${p.nemesis}/20" class="pc-nemesis-head" alt=""> ${p.nemesis}</div>
+      ${p.nemesis ? `<div class="pc-section pc-section--nemesis" onclick="${p.nemesis_uuid ? `showPlayerCard('${p.nemesis_uuid}')` : `searchByName('${p.nemesis}')`}" title="View ${p.nemesis}'s profile">
+        <div class="pc-section-title">💀 Nemesis</div>
+        <div class="pc-nemesis-name">
+          <img src="https://mc-heads.net/avatar/${p.nemesis}/24" class="pc-nemesis-head" alt="">
+          ${p.nemesis}
+          <span class="pc-nemesis-arrow">→</span>
+        </div>
         ${p.nemesis_deaths ? `<div class="pc-nemesis-deaths">${p.nemesis_deaths} deaths to them</div>` : ''}
       </div>` : ''}
       ${p.best_kda_score ? `<div class="pc-section">
-        <div class="pc-section-title">Best KDA</div>
+        <div class="pc-section-title">🏆 Best KDA</div>
         <div class="pc-best-kda">${p.best_kda_score}</div>
         ${p.best_kda_fight ? `<div class="pc-best-kda-fight">${p.best_kda_fight}</div>` : ''}
       </div>` : ''}
     </div>
     <div class="pc-source">Data from <a href="https://eldritchbot.com/player/${p.uuid}" target="_blank">EldritchBot</a></div>
   `;
+
   card.style.display = 'block';
-  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (empty) empty.style.display = 'none';
+}
+
+async function searchByName(name) {
+  const input = document.getElementById('playerSearchInput');
+  if (input) input.value = name;
+  // close autocomplete if open (hideSuggestions lives in the DOMContentLoaded closure)
+  const sugBox = document.getElementById('playerSuggestions');
+  if (sugBox) sugBox.classList.remove('open');
+  try {
+    const results = await fetch(`/api/eldritch/search?q=${encodeURIComponent(name)}`).then(r => r.json());
+    const exact = results.find(r => r.name.toLowerCase() === name.toLowerCase());
+    if (exact) { showPlayerCard(exact.uuid); return; }
+  } catch {}
+  searchPlayer();
 }
 
 async function showPlayerCard(uuid) {
   const status = document.getElementById('playerSearchStatus');
   const card   = document.getElementById('playerCard');
+  const empty  = document.getElementById('playerCardEmpty');
   card.style.display = 'none';
+  if (empty) empty.style.display = 'none';
   if (status) { status.textContent = 'Loading…'; status.className = 'players-search-status'; }
   try {
     const p = await fetch(`/api/eldritch/player/${uuid}`).then(r => r.json());
@@ -1990,6 +2047,7 @@ async function showPlayerCard(uuid) {
     if (status) status.textContent = '';
     renderPlayerCard(p);
   } catch (e) {
+    if (empty) empty.style.display = 'flex';
     if (status) { status.textContent = e.message || 'Not found'; status.className = 'players-search-status error'; }
   }
 }
@@ -2019,9 +2077,13 @@ async function searchPlayer() {
       if (lb) lb.innerHTML = local.map((p, i) => `
         <div class="plb-row" onclick="showPlayerCard('${p.uuid}')">
           <span class="plb-rank">#${i+1}</span>
-          <img class="plb-head" src="https://mc-heads.net/avatar/${p.name}/24" alt="">
-          <span class="plb-name">${p.name}</span>
-          <span class="plb-alliance">${p.alliance || ''}</span>
+          <img class="plb-head" src="https://mc-heads.net/avatar/${p.name}/36" alt="">
+          <div class="plb-name-col">
+            <div class="plb-name">${p.name}</div>
+            ${p.alliance ? `<div class="plb-sub">${p.alliance}</div>` : ''}
+          </div>
+          <span class="plb-stat"></span>
+          <span class="plb-kd"></span>
         </div>`).join('');
       return;
     }

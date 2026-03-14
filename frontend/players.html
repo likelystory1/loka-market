@@ -28,6 +28,7 @@
 
 <div class="players-header">
   <h1 class="players-title">Player Stats</h1>
+  <p class="players-powered">Powered by StromgardeBot</p>
   <p class="players-sub">Combat data from <a href="https://eldritchbot.com" target="_blank">EldritchBot</a></p>
 
   <div class="players-search-wrap">
@@ -41,25 +42,35 @@
   <div id="playerSearchStatus" class="players-search-status"></div>
 </div>
 
-<!-- Player card (shown after search) -->
-<div id="playerCard" class="player-card" style="display:none"></div>
+<!-- Split: Leaderboard (left) + Card (right) -->
+<div class="players-split">
 
-<!-- Leaderboard -->
-<div class="players-lb-wrap">
-  <div class="players-lb-header">
-    <span class="players-lb-title">Leaderboard</span>
-    <div class="players-sort-tabs">
-      <button class="ps-tab active" onclick="setLbSort('kills',this)">Kills</button>
-      <button class="ps-tab" onclick="setLbSort('assists',this)">Assists</button>
-      <button class="ps-tab" onclick="setLbSort('kda',this)">K/D</button>
-      <button class="ps-tab" onclick="setLbSort('conquest_wins',this)">Wins</button>
-      <button class="ps-tab" onclick="setLbSort('golems',this)">Golems</button>
-      <button class="ps-tab" onclick="setLbSort('potions',this)">Potions</button>
+  <!-- Leaderboard -->
+  <div class="players-lb-wrap">
+    <div class="players-lb-header">
+      <span class="players-lb-title">Leaderboard</span>
+      <div class="players-sort-tabs">
+        <button class="ps-tab active" onclick="setLbSort('kills',this)">Kills</button>
+        <button class="ps-tab" onclick="setLbSort('assists',this)">Assists</button>
+        <button class="ps-tab" onclick="setLbSort('kda',this)">K/D</button>
+        <button class="ps-tab" onclick="setLbSort('conquest_wins',this)">Wins</button>
+      </div>
+    </div>
+    <div id="playerLb" class="players-lb">
+      <div class="players-lb-loading">Loading…</div>
     </div>
   </div>
-  <div id="playerLb" class="players-lb">
-    <div class="players-lb-loading">Loading…</div>
+
+  <!-- Player card panel -->
+  <div class="players-card-panel">
+    <div id="playerCard" class="player-card" style="display:none"></div>
+    <div id="playerCardEmpty" class="players-card-empty">
+      <div class="pce-icon">⚔️</div>
+      <div class="pce-title">Select a Player</div>
+      <div class="pce-sub">Search above or click any leaderboard entry to view full combat stats</div>
+    </div>
   </div>
+
 </div>
 
 <footer class="footer">
