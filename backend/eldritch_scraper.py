@@ -439,9 +439,18 @@ def get_player(uuid: str) -> dict | None:
 def get_leaderboard(sort='kills', limit=50) -> list:
     valid = {'kills','deaths','assists','conquest_wins','conquest_losses',
              'golems','lamps','first_bloods','potions','food','close_calls'}
-    col = sort if sort in valid else 'kills'
     db  = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
+    if sort == 'kda':
+        rows = db.execute(
+            '''SELECT *, CAST(kills AS REAL) / CASE WHEN deaths = 0 THEN 1 ELSE deaths END AS kd_ratio
+               FROM player_stats WHERE error IS NULL AND name != "" AND kills > 0
+               ORDER BY kd_ratio DESC LIMIT ?''',
+            (limit,)
+        ).fetchall()
+        db.close()
+        return [dict(r) for r in rows]
+    col = sort if sort in valid else 'kills'
     rows = db.execute(
         f'SELECT * FROM player_stats WHERE error IS NULL AND name != "" ORDER BY {col} DESC LIMIT ?',
         (limit,)
