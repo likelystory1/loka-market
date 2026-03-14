@@ -453,7 +453,7 @@ def get_leaderboard(sort='kills', limit=50) -> list:
     if sort == 'kda_worst':
         rows = db.execute(
             '''SELECT *, CAST(kills AS REAL) / CASE WHEN deaths = 0 THEN 1 ELSE deaths END AS kd_ratio
-               FROM player_stats WHERE error IS NULL AND name != "" AND kills >= 50
+               FROM player_stats WHERE error IS NULL AND name != "" AND deaths > 0
                ORDER BY kd_ratio ASC LIMIT ?''',
             (limit,)
         ).fetchall()
