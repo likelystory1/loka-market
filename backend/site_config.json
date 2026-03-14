@@ -1,0 +1,16 @@
+{
+  "announcement": {
+    "enabled": true,
+    "messages": [
+      { "text": "Stromgarde Mobilizing To War Again!", "type": "warning" },
+      { "text": "Sleeping Giant of the North Awakening!", "type": "warning" },
+      { "text": "Wolf Force returns?", "type": "info" },
+      { "text": "ArcherSquid Unbanned After Two Years!", "type": "success" }
+    ]
+  },
+  "hero_images": [
+    {"url": "", "caption": ""},
+    {"url": "", "caption": ""},
+    {"url": "", "caption": ""}
+  ]
+}
