@@ -964,6 +964,9 @@ def api_eldritch_player(identifier):
         data = fetch_player(uuid)
         if data.get('error') == 'not_found':
             return jsonify({'error': 'Player has no EldritchBot record'}), 404
+        # Persist to local DB if not already present, so they appear in the leaderboard
+        if not get_player(uuid):
+            threading.Thread(target=save_player, args=(data,), daemon=True).start()
     except Exception as e:
         # Fall back to cache if live fetch fails
         data = get_player(uuid)
