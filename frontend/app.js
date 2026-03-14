@@ -1610,7 +1610,7 @@ function renderFightDetail(fight, filename) {
       <div class="fight-team-panel fight-team-panel--att">
         <div class="fight-team-header fight-team-header--att">
           <div class="fight-team-header-main">
-            ⚔ ${[...new Set(fight.attackers.map(p => p.town).filter(Boolean))].join(', ') || 'Attackers'}
+            ⚔ ${fight.attacker_town || 'Attackers'}
           </div>
           <span class="fight-team-count">${fight.attackers.length} players</span>
         </div>
@@ -1630,7 +1630,7 @@ function renderFightDetail(fight, filename) {
       <div class="fight-team-panel fight-team-panel--def">
         <div class="fight-team-header fight-team-header--def">
           <div class="fight-team-header-main">
-            🛡 ${[...new Set(fight.defenders.map(p => p.town).filter(Boolean))].join(', ') || 'Defenders'}
+            🛡 ${fight.defender_town || 'Defenders'}
           </div>
           <span class="fight-team-count">${fight.defenders.length} players</span>
         </div>
