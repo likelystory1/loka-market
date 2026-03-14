@@ -19,9 +19,9 @@
     "type": "founder",
     "name": "Teyu",
     "uuid": "5284d4abdb1444f2bb98434cf50b323c",
-    "title": "3/4",
+    "title": "3/4 — The Killer of Dreams",
     "rank": "GENERAL",
-    "note": "Teyu."
+    "note": "Teyu let the town in 2019."
   },
   {
     "type": "founder",
@@ -35,7 +35,7 @@
     "type": "traitor",
     "name": "sSteak",
     "uuid": "1849e68a22d14d9cbe6f29f88fbb8b54",
-    "title": "Traitor",
+    "title": "Excommunicated",
     "rank": "TRAITOR",
     "note": "Turned their back on Stromgarde. Marked."
   },
@@ -43,7 +43,7 @@
     "type": "traitor",
     "name": "ThePigGang",
     "uuid": "5fd39e829ad646ebad38188cfde78fad",
-    "title": "Traitor",
+    "title": "Excommunicated",
     "rank": "TRAITOR",
     "note": "Turned their back on Stromgarde. Marked."
   }
