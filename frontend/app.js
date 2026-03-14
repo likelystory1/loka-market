@@ -264,6 +264,57 @@ async function loadPlayers() {
   }
 }
 
+/* ── render sellers leaderboard ─────────────────────────────────────────── */
+let sellersLoaded = false;
+
+async function loadSellers() {
+  if (sellersLoaded) return;
+  sellersLoaded = true;
+
+  const wrap = document.getElementById('sellersWrap');
+  try {
+    const sellers = await fetch('/api/sellers').then(r => r.json());
+    if (!sellers.length) {
+      wrap.innerHTML = '<div class="empty-state">No seller data found.</div>';
+      return;
+    }
+
+    const rankClass = r => r === 1 ? 'rank-gold' : r === 2 ? 'rank-silver' : r === 3 ? 'rank-bronze' : '';
+    const rankLabel = r => r === 1 ? '1ST' : r === 2 ? '2ND' : r === 3 ? '3RD' : `#${r}`;
+
+    wrap.innerHTML = `<div class="player-grid">${
+      sellers.map(s => {
+        const favName = s.fav_item ? formatName(s.fav_item) : '—';
+        const favIcon = s.fav_item
+          ? `<img class="player-fav-icon" src="${iconUrl(s.fav_item)}" onerror="this.style.display='none'" alt="">`
+          : '';
+        return `
+          <div class="player-card ${rankClass(s.rank)}">
+            <div class="player-rank">${rankLabel(s.rank)}</div>
+            <img class="player-head"
+                 src="https://mc-heads.net/avatar/${s.uuid}/56"
+                 alt="${s.name}"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div class="player-head-fallback" style="display:none">${s.name.charAt(0)}</div>
+            <div class="player-info">
+              <div class="player-username">${s.name}</div>
+              <div class="player-spent">
+                ${formatPrice(s.total_earned)}
+                <span class="player-spent-label">shards earned</span>
+              </div>
+              <div class="player-meta">
+                <span class="player-trades">${s.trade_count.toLocaleString()} sales</span>
+                <span class="player-fav">${favIcon}${favName}</span>
+              </div>
+            </div>
+          </div>`;
+      }).join('')
+    }</div>`;
+  } catch (_) {
+    wrap.innerHTML = '<div class="empty-state">Failed to load leaderboard.</div>';
+  }
+}
+
 /* ── tabs ───────────────────────────────────────────────────────────────── */
 function initTabs() {
   document.querySelectorAll('.tab').forEach(btn => {
@@ -274,8 +325,10 @@ function initTabs() {
       document.getElementById('tab-market').style.display  = tab === 'market'  ? '' : 'none';
       document.getElementById('tab-recent').style.display  = tab === 'recent'  ? '' : 'none';
       document.getElementById('tab-players').style.display = tab === 'players' ? '' : 'none';
+      document.getElementById('tab-sellers').style.display = tab === 'sellers' ? '' : 'none';
       if (tab === 'recent')  loadRecent();
       if (tab === 'players') loadPlayers();
+      if (tab === 'sellers') loadSellers();
     });
   });
 }
