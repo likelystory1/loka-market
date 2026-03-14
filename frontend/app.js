@@ -2100,7 +2100,8 @@ async function searchPlayer() {
     if (p.error) throw new Error(p.error);
     if (status) status.textContent = '';
     renderPlayerCard(p);
-    loadLeaderboard(); // refresh lb to include new entry
+    // Delay slightly so the server's background DB write completes before we re-query
+    setTimeout(loadLeaderboard, 800);
   } catch (e) {
     if (status) {
       status.textContent = e.message?.includes('Mojang') ? 'Player not found' : (e.message || 'Failed to fetch stats');
@@ -2203,5 +2204,5 @@ async function updateScrapeProgress() {
 
 async function initPlayersPage() {
   await loadLeaderboard();
-  setInterval(() => { loadLeaderboard(); }, 30000);
+  setInterval(() => { loadLeaderboard(); }, 120000); // background refresh every 2 min
 }
