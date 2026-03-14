@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Loka Utils</title>
+  <title>StromgardeBot</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
@@ -12,67 +12,132 @@
 
 <nav class="navbar">
   <div class="nav-brand" onclick="location.href='/'">
-    <span class="brand-icon">⛏</span>
-    <span class="brand-text">LOKA UTILS</span>
+    <span class="brand-icon">⚔</span>
+    <span class="brand-text">STROMGARDEBOT</span>
   </div>
   <div class="nav-links">
     <a href="/market.html" class="nav-link">Market</a>
     <a href="/alliances.html" class="nav-link">Alliances</a>
     <a href="/towns.html" class="nav-link">Towns</a>
+    <a href="/map" class="nav-link">Map</a>
+    <a href="/founders" class="nav-link">Founders</a>
+    <a href="/territories" class="nav-link">War Room</a>
   </div>
 </nav>
+
+<!-- Announcement Bar — CNN-style scrolling ticker -->
+<div id="announcementBar" style="display:none">
+  <div class="ann-label">⚔ STROMGARDE</div>
+  <div class="ann-track">
+    <span id="annText" class="ann-scroll"></span>
+  </div>
+</div>
 
 <div class="hub-hero">
   <div class="hub-hero-inner">
     <h1 class="hub-title">Your Loka<br><span class="hub-title-accent">Command Center</span></h1>
-    <p class="hub-subtitle">Live market data, alliance intelligence, and settlement info — all in one place.</p>
+    <p class="hub-subtitle">Forged in the frozen peaks of Kalros. Ancient power. Modern intelligence.</p>
   </div>
 </div>
 
-<div class="hub-cards">
-  <a href="/market.html" class="hub-card hub-card--market">
-    <div class="hub-card-glow"></div>
-    <div class="hub-card-top">
-      <span class="hub-card-emoji">🏪</span>
-      <span class="hub-card-tag">Market</span>
-    </div>
-    <div class="hub-card-title">Economy Terminal</div>
-    <div class="hub-card-desc">Live prices, fair value zones, trade history and top spender leaderboards for every item on the Loka exchange.</div>
-    <div class="hub-card-footer">
-      <span class="hub-card-link">Browse market →</span>
-    </div>
-  </a>
+<!-- Hub layout: battle reel sidebar + cards -->
+<div class="hub-main-layout">
 
-  <a href="/alliances.html" class="hub-card hub-card--alliances">
-    <div class="hub-card-glow"></div>
-    <div class="hub-card-top">
-      <span class="hub-card-emoji">⚔️</span>
-      <span class="hub-card-tag">Alliances</span>
-    </div>
-    <div class="hub-card-title">Power Rankings</div>
-    <div class="hub-card-desc">Browse all active alliances, their CC strength, Balak power, vulnerability windows, and every member town.</div>
-    <div class="hub-card-footer">
-      <span class="hub-card-link">View alliances →</span>
-    </div>
-  </a>
+  <!-- Battle Reel Sidebar -->
+  <div id="battleReelWrap" style="display:none">
+    <div class="reel-sidebar-header">⚔ BATTLE FEED</div>
+    <div id="battleReel"></div>
+  </div>
 
-  <a href="/towns.html" class="hub-card hub-card--towns">
-    <div class="hub-card-glow"></div>
-    <div class="hub-card-top">
-      <span class="hub-card-emoji">🏰</span>
-      <span class="hub-card-tag">Towns</span>
-    </div>
-    <div class="hub-card-title">Settlement Atlas</div>
-    <div class="hub-card-desc">Explore every town across Kalros, Ascalon, and Garama. Filter by continent, sort by level, and find recruiting towns.</div>
-    <div class="hub-card-footer">
-      <span class="hub-card-link">Explore towns →</span>
-    </div>
-  </a>
+  <!-- Hub Cards -->
+  <div class="hub-cards">
+    <a href="/market.html" class="hub-card hub-card--market">
+      <div class="hub-card-glow"></div>
+      <div class="hub-card-top">
+        <span class="hub-card-emoji">🏪</span>
+        <span class="hub-card-tag">Market</span>
+      </div>
+      <div class="hub-card-title">Economy Terminal</div>
+      <div class="hub-card-desc">Live prices, fair value zones, trade history and top spender leaderboards for every item on the Loka exchange.</div>
+      <div class="hub-card-footer">
+        <span class="hub-card-link">Browse market →</span>
+      </div>
+    </a>
+
+    <a href="/alliances.html" class="hub-card hub-card--alliances">
+      <div class="hub-card-glow"></div>
+      <div class="hub-card-top">
+        <span class="hub-card-emoji">⚔️</span>
+        <span class="hub-card-tag">Alliances</span>
+      </div>
+      <div class="hub-card-title">Power Rankings</div>
+      <div class="hub-card-desc">Browse all active alliances, their CC strength, Balak power, vulnerability windows, and every member town.</div>
+      <div class="hub-card-footer">
+        <span class="hub-card-link">View alliances →</span>
+      </div>
+    </a>
+
+    <a href="/towns.html" class="hub-card hub-card--towns">
+      <div class="hub-card-glow"></div>
+      <div class="hub-card-top">
+        <span class="hub-card-emoji">🏰</span>
+        <span class="hub-card-tag">Towns</span>
+      </div>
+      <div class="hub-card-title">Settlement Atlas</div>
+      <div class="hub-card-desc">Explore every town across Kalros, Ascalon, and Garama. Filter by continent, sort by level, and find recruiting towns.</div>
+      <div class="hub-card-footer">
+        <span class="hub-card-link">Explore towns →</span>
+      </div>
+    </a>
+
+    <a href="/map" class="hub-card hub-card--map">
+      <div class="hub-card-glow"></div>
+      <div class="hub-card-top">
+        <span class="hub-card-emoji">🗺️</span>
+        <span class="hub-card-tag">Map</span>
+      </div>
+      <div class="hub-card-title">World Map</div>
+      <div class="hub-card-desc">Interactive live map of Loka's continents. Browse territories, towns, and battlegrounds across all three worlds.</div>
+      <div class="hub-card-footer">
+        <span class="hub-card-link">Open map →</span>
+      </div>
+    </a>
+
+    <a href="/founders" class="hub-card hub-card--founders">
+      <div class="hub-card-glow"></div>
+      <div class="hub-card-top">
+        <span class="hub-card-emoji">🌟</span>
+        <span class="hub-card-tag">Founders</span>
+      </div>
+      <div class="hub-card-title">Hall of Founders</div>
+      <div class="hub-card-desc">Meet the players who built Stromgarde's legacy — the founders, champions, and legends of the frozen north.</div>
+      <div class="hub-card-footer">
+        <span class="hub-card-link">View founders →</span>
+      </div>
+    </a>
+
+    <a href="/territories" class="hub-card hub-card--territories">
+      <div class="hub-card-glow"></div>
+      <div class="hub-card-top">
+        <span class="hub-card-emoji">⚔️</span>
+        <span class="hub-card-tag">Territories</span>
+      </div>
+      <div class="hub-card-title">War Room</div>
+      <div class="hub-card-desc">Live battle feed, territory ownership changes, conquest tracking and war statistics across all continents.</div>
+      <div class="hub-card-footer">
+        <span class="hub-card-link">Enter war room →</span>
+      </div>
+    </a>
+  </div>
 </div>
 
+<!-- Hero Images -->
+<div id="heroImages"></div>
+
 <footer class="footer">
-  Loka Utils &nbsp;•&nbsp; Data from <a href="https://lokamc.com" target="_blank">LokaMinecraft</a>
+  StromgardeBot &nbsp;•&nbsp; Data from <a href="https://lokamc.com" target="_blank">LokaMinecraft</a>
 </footer>
 
+<script src="app.js"></script>
 </body>
 </html>

@@ -12,11 +12,13 @@ from flask import Flask, jsonify, send_from_directory, request, abort
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from territory_poller import start_territory_poller
 
 # ── paths ─────────────────────────────────────────────────────────────────────
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH  = os.path.join(BASE_DIR, "market_history.db")
-FRONTEND = os.path.join(BASE_DIR, "..", "frontend")
+BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
+DB_PATH         = os.path.join(BASE_DIR, "market_history.db")
+TERRITORIES_DB  = os.path.join(BASE_DIR, "territories.db")
+FRONTEND        = os.path.join(BASE_DIR, "..", "frontend")
 
 # ── app ───────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -63,6 +65,59 @@ def ensure_indexes():
     conn.commit()
     conn.close()
 
+def ensure_battle_tables():
+    db = sqlite3.connect(TERRITORIES_DB)
+    c = db.cursor()
+    c.executescript('''
+        CREATE TABLE IF NOT EXISTS territory_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            poll_ts INTEGER NOT NULL,
+            territory_num INTEGER NOT NULL,
+            world TEXT NOT NULL,
+            area_name TEXT,
+            mutator TEXT,
+            town_id TEXT,
+            last_battle INTEGER,
+            inhibitor_town TEXT,
+            raw_json TEXT
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_snap_unique ON territory_snapshots(poll_ts, territory_num, world);
+        CREATE INDEX IF NOT EXISTS idx_snap_poll_ts ON territory_snapshots(poll_ts);
+
+        CREATE TABLE IF NOT EXISTS battle_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            detected_ts INTEGER NOT NULL,
+            territory_num INTEGER NOT NULL,
+            world TEXT NOT NULL,
+            area_name TEXT,
+            mutator TEXT,
+            old_town_id TEXT,
+            new_town_id TEXT,
+            old_alliance_id TEXT,
+            new_alliance_id TEXT,
+            old_alliance_name TEXT,
+            new_alliance_name TEXT,
+            old_town_name TEXT,
+            new_town_name TEXT,
+            strength_delta INTEGER,
+            territory_won_by TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_battle_ts ON battle_events(detected_ts);
+        CREATE INDEX IF NOT EXISTS idx_battle_mutator ON battle_events(mutator);
+
+        CREATE TABLE IF NOT EXISTS alliance_strength_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            poll_ts INTEGER NOT NULL,
+            alliance_id TEXT NOT NULL,
+            alliance_name TEXT,
+            strength INTEGER,
+            bb_strength INTEGER
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_allstr_poll_aid ON alliance_strength_snapshots(poll_ts, alliance_id);
+    ''')
+    db.commit()
+    db.close()
+
 # ── block write methods on all API routes ─────────────────────────────────────
 @app.before_request
 def enforce_read_only():
@@ -79,9 +134,11 @@ def add_headers(resp):
     resp.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline'; "
-        "style-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' https://mc-heads.net https://raw.githubusercontent.com data:; "
         "connect-src 'self'; "
+        "frame-src https://lokamc.com; "
         "frame-ancestors 'none'"
     )
     return resp
@@ -207,27 +264,58 @@ def _compute_stats(prices: list) -> dict | None:
         "sample":        len(clean),
     }
 
+# ── item name normalisation ────────────────────────────────────────────────────
+# Any item whose name ends with SHULKER_BOX (e.g. WHITE_SHULKER_BOX) is merged
+# into the canonical SHULKER_BOX entry. Add more rules here as needed.
+def _normalize_item(name: str) -> str:
+    if name.endswith('SHULKER_BOX'):
+        return 'SHULKER_BOX'
+    return name
+
+def _item_variants(c, canonical: str):
+    """Return every raw item name in the DB that normalises to `canonical`."""
+    if canonical == 'SHULKER_BOX':
+        rows = c.execute(
+            "SELECT DISTINCT item FROM trades WHERE item LIKE '%SHULKER_BOX'"
+        ).fetchall()
+        return [r[0] for r in rows]
+    return [canonical]
+
+def _fetch_prices(c, raw_names, limit=200):
+    ph = ','.join('?' * len(raw_names))
+    return [r[0] for r in c.execute(
+        f"SELECT price FROM trades WHERE item IN ({ph}) ORDER BY ts DESC, rowid DESC LIMIT {limit}",
+        raw_names
+    ).fetchall()]
+
 # ── build items list ──────────────────────────────────────────────────────────
 def _build_items():
     conn = get_db()
     c    = conn.cursor()
-    rows = c.execute(
+    # Group raw DB items by their canonical (normalised) name
+    raw_rows = c.execute(
         "SELECT item, COUNT(*) AS vol, MAX(ts) AS last_ts FROM trades GROUP BY item ORDER BY vol DESC"
     ).fetchall()
+
+    from collections import defaultdict
+    groups = defaultdict(lambda: {"vol": 0, "last_ts": 0, "raw_names": []})
+    for row in raw_rows:
+        canon = _normalize_item(row["item"])
+        groups[canon]["vol"]      += row["vol"]
+        groups[canon]["last_ts"]   = max(groups[canon]["last_ts"], row["last_ts"] or 0)
+        groups[canon]["raw_names"].append(row["item"])
+
     results = []
-    for row in rows:
-        name   = row["item"]
-        prows  = c.execute(
-            "SELECT price FROM trades WHERE item=? ORDER BY ts DESC, rowid DESC LIMIT 200",
-            (name,)
-        ).fetchall()
-        prices = [p[0] for p in prows]
+    for canon, g in groups.items():
+        prices = _fetch_prices(c, g["raw_names"])
         stats  = _compute_stats(prices)
         if stats is None:
             continue
-        results.append({"item": name, "volume": row["vol"],
+        results.append({"item": canon, "volume": g["vol"],
                         "last_price": prices[0] if prices else None,
-                        "last_ts": row["last_ts"], **stats})
+                        "last_ts": g["last_ts"], **stats})
+
+    results.sort(key=lambda x: x["volume"], reverse=True)
     conn.close()
     return results
 
@@ -260,6 +348,18 @@ def towns_page():
 @app.route("/market")
 def market_page_route():
     return send_from_directory(FRONTEND, "market.html")
+
+@app.route("/map")
+def map_page():
+    return send_from_directory(FRONTEND, "map.html")
+
+@app.route("/founders")
+def founders_page():
+    return send_from_directory(FRONTEND, "founders.html")
+
+@app.route("/territories")
+def territories_page():
+    return send_from_directory(FRONTEND, "territories.html")
 
 @app.route("/<path:filename>")
 def static_files(filename):
@@ -300,15 +400,19 @@ def items():
 def item_detail(item_name):
     conn = get_db()
     c    = conn.cursor()
-    trades = c.execute("""
+    # Resolve canonical name and all raw DB variants
+    canon    = _normalize_item(item_name)
+    variants = _item_variants(c, canon)
+    ph       = ','.join('?' * len(variants))
+    trades = c.execute(f"""
         SELECT price, buyer_uuid, seller_uuid, ts
-        FROM trades WHERE item=?
+        FROM trades WHERE item IN ({ph})
         ORDER BY ts DESC, rowid DESC LIMIT 100
-    """, (item_name,)).fetchall()
-    total  = c.execute("SELECT COUNT(*) FROM trades WHERE item=?", (item_name,)).fetchone()[0]
+    """, variants).fetchall()
+    total  = c.execute(f"SELECT COUNT(*) FROM trades WHERE item IN ({ph})", variants).fetchone()[0]
     prows  = c.execute(
-        "SELECT price FROM trades WHERE item=? ORDER BY ts DESC, rowid DESC LIMIT 200",
-        (item_name,)
+        f"SELECT price FROM trades WHERE item IN ({ph}) ORDER BY ts DESC, rowid DESC LIMIT 200",
+        variants
     ).fetchall()
     conn.close()
 
@@ -458,6 +562,158 @@ def top_players():
     _cache_set("players", results)
     return jsonify(results)
 
+# ── world / area name display maps ────────────────────────────────────────────
+WORLD_DISPLAY = {
+    'north':  'Kalros',
+    'south':  'Garama',
+    'west':   'Ascalon',
+    'lilboi': 'Rivina',
+    'bigboi': 'Balak',
+}
+
+def _display_world(raw):
+    return WORLD_DISPLAY.get((raw or '').lower(), (raw or '').capitalize())
+
+def _display_area(raw, world=''):
+    """Human-readable area name."""
+    if not raw:
+        return ''
+    import re
+    s = raw.strip()
+    # Rivina tiles: lbisle<N> or lb<anything>
+    m = re.match(r'^lb(?:isle)?(\d+)$', s, re.I)
+    if m:
+        return f'Rivina Tile {m.group(1)}'
+    # Balak tiles: bbisle<N> or bb<anything>
+    m = re.match(r'^bb(?:isle)?(\d+)$', s, re.I)
+    if m:
+        return f'Balak Tile {m.group(1)}'
+    # Strip lb/bb prefix on other names (e.g. lbcoast -> Coast)
+    s = re.sub(r'^lb', '', s, flags=re.I)
+    s = re.sub(r'^bb', '', s, flags=re.I)
+    # Replace underscores, title-case
+    return s.replace('_', ' ').title()
+
+# ── api: battles ──────────────────────────────────────────────────────────────
+def _build_town_lookup():
+    """Return town_id -> {town_name, alliance_name} using towns + alliances cache."""
+    town_name_map   = {}   # town_id -> town_name
+    alliance_map    = {}   # town_id -> alliance_name
+    try:
+        with _loka_lock:
+            # Build town_id -> name from towns cache
+            if os.path.exists(LOKA_CACHE_TOWNS):
+                with open(LOKA_CACHE_TOWNS) as f:
+                    tdata = json.load(f)
+                for t in tdata.get('_embedded', {}).get('towns', []):
+                    tid = str(t.get('id', ''))
+                    if tid:
+                        town_name_map[tid] = t.get('name', '')
+            # Build town_id -> alliance from alliances townIds
+            if os.path.exists(LOKA_CACHE_ALLIANCES):
+                with open(LOKA_CACHE_ALLIANCES) as f:
+                    adata = json.load(f)
+                for a in adata.get('_embedded', {}).get('alliances', []):
+                    aname = a.get('name', '')
+                    for tid in (a.get('townIds') or []):
+                        alliance_map[str(tid)] = aname
+    except Exception:
+        pass
+    # Merge
+    all_ids = set(town_name_map) | set(alliance_map)
+    return {tid: {'town_name': town_name_map.get(tid, ''), 'alliance_name': alliance_map.get(tid, '')} for tid in all_ids}
+
+@app.route("/api/battles")
+def api_battles():
+    try:
+        db = sqlite3.connect(TERRITORIES_DB)
+        db.row_factory = sqlite3.Row
+        c = db.cursor()
+
+        def fetch_battles(query, params=()):
+            try:
+                return [dict(r) for r in c.execute(query, params).fetchall()]
+            except Exception:
+                return []
+
+        now = int(time.time())
+        day_ago = now - 86400
+
+        # Diff-based battle events (ownership changes detected between polls)
+        recent     = fetch_battles('SELECT * FROM battle_events WHERE detected_ts > ? ORDER BY detected_ts DESC LIMIT 100', (day_ago,))
+        top_alliance = fetch_battles('SELECT * FROM battle_events ORDER BY ABS(COALESCE(strength_delta,0)) DESC LIMIT 50')
+        rivina     = fetch_battles("SELECT * FROM battle_events WHERE mutator='rivina' OR world='rivina' ORDER BY detected_ts DESC LIMIT 50")
+        no_transfer = fetch_battles('SELECT * FROM battle_events WHERE strength_delta=0 OR strength_delta IS NULL ORDER BY detected_ts DESC LIMIT 50')
+
+        # Territory activity from latest snapshot — territories with a recent
+        # last_battle timestamp, regardless of ownership change.
+        # last_battle is stored in milliseconds in the Loka API.
+        latest_poll = c.execute('SELECT MAX(poll_ts) FROM territory_snapshots').fetchone()[0]
+        recent_activity = []
+        if latest_poll:
+            week_ago_ms = (now - 7 * 86400) * 1000
+            snap_rows = c.execute('''
+                SELECT territory_num, world, area_name, mutator, town_id, last_battle
+                FROM territory_snapshots
+                WHERE poll_ts = ? AND last_battle > ?
+                ORDER BY last_battle DESC LIMIT 100
+            ''', (latest_poll, week_ago_ms)).fetchall()
+
+            town_lookup = _build_town_lookup()
+            for row in snap_rows:
+                town_id   = row['town_id'] or ''
+                info      = town_lookup.get(town_id, {})
+                raw_world = row['world'] or ''
+                raw_area  = row['area_name'] or ''
+                recent_activity.append({
+                    'territory_num':    row['territory_num'],
+                    'world':            raw_world,
+                    'world_display':    _display_world(raw_world),
+                    'area_name':        _display_area(raw_area, raw_world),
+                    'mutator':          row['mutator'],
+                    'town_id':          town_id,
+                    'town_name':        info.get('town_name', ''),
+                    'alliance_name':    info.get('alliance_name', ''),
+                    'last_battle':      row['last_battle'],
+                    'last_battle_ts':   int(row['last_battle'] / 1000) if row['last_battle'] else None,
+                    'territory_won_by': 'activity',
+                })
+
+        db.close()
+        return jsonify({
+            'recent_battles':      recent,
+            'top_alliance_battles': top_alliance,
+            'rivina_battles':      rivina,
+            'no_transfer_battles': no_transfer,
+            'recent_activity':     recent_activity,
+        })
+    except Exception as e:
+        return jsonify({
+            'recent_battles': [], 'top_alliance_battles': [],
+            'rivina_battles': [], 'no_transfer_battles': [],
+            'recent_activity': [], 'error': str(e)
+        })
+
+# ── api: site config ───────────────────────────────────────────────────────────
+@app.route("/api/site_config")
+def api_site_config():
+    try:
+        config_path = os.path.join(BASE_DIR, 'site_config.json')
+        with open(config_path) as f:
+            return jsonify(json.load(f))
+    except Exception:
+        return jsonify({'announcement': {'enabled': False, 'text': '', 'type': 'info'}, 'hero_images': []})
+
+# ── api: founders ──────────────────────────────────────────────────────────────
+@app.route("/api/founders")
+def api_founders():
+    try:
+        founders_path = os.path.join(BASE_DIR, 'founders.json')
+        with open(founders_path) as f:
+            return jsonify(json.load(f))
+    except Exception:
+        return jsonify([])
+
 # ── loka data cache (file-backed, refreshed every 5 min) ─────────────────────
 LOKA_CACHE_DIR       = os.path.join(BASE_DIR, "cache")
 LOKA_CACHE_ALLIANCES = os.path.join(LOKA_CACHE_DIR, "alliances.json")
@@ -547,10 +803,26 @@ def loka_proxy(path):
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
+# ── alliances cache getter (for territory poller) ─────────────────────────────
+def _get_alliances_cache():
+    """Return the cached alliances list for the territory poller."""
+    try:
+        if os.path.exists(LOKA_CACHE_ALLIANCES):
+            with _loka_lock:
+                with open(LOKA_CACHE_ALLIANCES) as f:
+                    data = json.load(f)
+            return data.get('_embedded', {}).get('alliances', [])
+    except Exception:
+        pass
+    return []
+
 # ── startup ───────────────────────────────────────────────────────────────────
+import database as _db_module; _db_module.init_db()
 ensure_indexes()
-threading.Thread(target=_warmup,           daemon=True).start()
-threading.Thread(target=_loka_cache_loop,  daemon=True).start()
+ensure_battle_tables()
+threading.Thread(target=_warmup,          daemon=True).start()
+threading.Thread(target=_loka_cache_loop, daemon=True).start()
+start_territory_poller(_get_alliances_cache)
 
 if __name__ == "__main__":
     # For local dev only — production uses gunicorn (see gunicorn.conf.py)

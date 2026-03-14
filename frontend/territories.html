@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>War Room — StromgardeBot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-brand" onclick="location.href='/'">
+    <span class="brand-icon">⚔</span>
+    <span class="brand-text">STROMGARDEBOT</span>
+  </div>
+  <div class="nav-links">
+    <a href="/market.html" class="nav-link">Market</a>
+    <a href="/alliances.html" class="nav-link">Alliances</a>
+    <a href="/towns.html" class="nav-link">Towns</a>
+    <a href="/map" class="nav-link">Map</a>
+    <a href="/founders" class="nav-link">Founders</a>
+    <a href="/territories" class="nav-link active">War Room</a>
+  </div>
+</nav>
+
+<div class="page-header page-header--territories">
+  <div class="page-header-inner">
+    <h1 class="page-title"><span class="page-title-icon">⚔️</span> War Room</h1>
+    <p class="page-subtitle">Live battle intelligence — territory captures, defenses, and conquest tracking</p>
+  </div>
+</div>
+
+<div class="territories-layout">
+
+  <!-- Stats Bar -->
+  <div class="terr-stats-bar" id="terrStatsBar">
+    <div class="terr-stat">
+      <span class="terr-stat-val" id="statTotalBattles">—</span>
+      <span class="terr-stat-lbl">Total Battles (24h)</span>
+    </div>
+    <div class="terr-stat">
+      <span class="terr-stat-val won-attacker" id="statCaptures">—</span>
+      <span class="terr-stat-lbl">Captures</span>
+    </div>
+    <div class="terr-stat">
+      <span class="terr-stat-val won-defender" id="statDefenses">—</span>
+      <span class="terr-stat-lbl">Defenses</span>
+    </div>
+    <div class="terr-stat">
+      <span class="terr-stat-val" style="color:var(--yellow)" id="statRivina">—</span>
+      <span class="terr-stat-lbl">Rivina Battles</span>
+    </div>
+    <div class="terr-stat">
+      <span class="terr-stat-lbl" id="statLastPoll" style="color:var(--dim);font-size:11px">Polling every 5 min</span>
+    </div>
+  </div>
+
+  <!-- Filter tabs -->
+  <div class="terr-tabs" id="terrTabs">
+    <button class="terr-tab active" data-tab="recent" onclick="terrTab(this)">Recent (24h)</button>
+    <button class="terr-tab" data-tab="top"    onclick="terrTab(this)">Top Battles</button>
+    <button class="terr-tab" data-tab="rivina" onclick="terrTab(this)">Rivina</button>
+    <button class="terr-tab" data-tab="standoff" onclick="terrTab(this)">Standoffs</button>
+  </div>
+
+  <!-- Battle Feed -->
+  <div class="terr-feed" id="terrFeed">
+    <div class="terr-loading">Loading battle data...</div>
+  </div>
+
+</div>
+
+<footer class="footer">
+  StromgardeBot &nbsp;•&nbsp; Data from <a href="https://lokamc.com" target="_blank">LokaMinecraft</a>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

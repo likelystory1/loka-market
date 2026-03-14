@@ -1125,8 +1125,317 @@ async function initTowns() {
   }
 }
 
+/* ══════════════════════════════════════════════════════════════════════════ */
+/*  INDEX: ANNOUNCEMENT BAR + BATTLE REEL + HERO IMAGES                      */
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+async function initAnnouncement() {
+  try {
+    const cfg = await fetch('/api/site_config').then(r => r.json());
+    const ann = cfg.announcement;
+    const messages = ann && ann.enabled
+      ? (ann.messages || (ann.text ? [{ text: ann.text, type: ann.type || 'warning' }] : []))
+      : [];
+    if (messages.length) {
+      const bar = document.getElementById('announcementBar');
+      if (!bar) return;
+      const el = document.getElementById('annText');
+      const spacer = '\u00a0\u00a0\u00a0\u00a0\u2605\u00a0\u00a0\u00a0\u00a0';
+
+      let idx = 0;
+      function showMsg(i) {
+        const m = messages[i % messages.length];
+        bar.className = `type-${m.type || 'warning'}`;
+        // Triple the text for a seamless scroll loop
+        el.textContent = m.text + spacer + m.text + spacer + m.text;
+        // Reset animation
+        el.style.animation = 'none';
+        el.offsetHeight; // reflow
+        el.style.animation = '';
+        bar.style.display = 'flex';
+      }
+      showMsg(0);
+      // Rotate message every 18 seconds (matches scroll duration)
+      setInterval(() => { idx++; showMsg(idx); }, 18000);
+    }
+
+    // Hero images
+    const heroImages = cfg.hero_images || [];
+    const heroEl = document.getElementById('heroImages');
+    if (heroEl) {
+      const slots = heroImages.map(img => {
+        if (img.url) {
+          return `
+            <div class="hero-img-slot">
+              <img src="${img.url}" alt="${img.caption || ''}" onerror="this.parentElement.className='hero-img-slot empty';this.parentElement.innerHTML='No image'">
+              ${img.caption ? `<div class="hero-img-caption">${img.caption}</div>` : ''}
+            </div>`;
+        }
+        return '';
+      }).filter(Boolean).join('');
+      if (slots) heroEl.innerHTML = slots;
+    }
+  } catch (_) {}
+}
+
+async function initBattleReel() {
+  const wrap = document.getElementById('battleReelWrap');
+  const reel = document.getElementById('battleReel');
+  if (!wrap || !reel) return;
+
+  function reelClass(b) {
+    if (b.territory_won_by === 'attacker') return 'won-attacker';
+    if (b.territory_won_by === 'defender') return 'won-defender';
+    if (b.mutator === 'rivina' || b.world === 'rivina') return 'won-rivina';
+    if (b.territory_won_by === 'activity') return 'won-unknown';
+    return 'won-unknown';
+  }
+  function reelLabel(b) {
+    if (b.territory_won_by === 'attacker') return 'CAPTURED';
+    if (b.territory_won_by === 'defender') return 'DEFENDED';
+    if (b.territory_won_by === 'activity') return 'BATTLE';
+    if (b.mutator === 'rivina' || b.world === 'rivina') return 'RIVINA';
+    return 'STANDOFF';
+  }
+  function reelItem(b) {
+    const cls  = reelClass(b);
+    const lbl  = reelLabel(b);
+    const area = b.area_name || `T-${b.territory_num}`;
+    const world = (b.world_display || b.world) ? `[${(b.world_display || b.world).toUpperCase()}]` : '';
+    let detail, ts;
+    if (b.territory_won_by === 'activity') {
+      const owner = b.alliance_name || b.town_name || '?';
+      const agoSec = b.last_battle_ts ? Math.round((Date.now()/1000) - b.last_battle_ts) : null;
+      const agoStr = agoSec != null ? (agoSec < 3600 ? `${Math.round(agoSec/60)}m ago` : `${Math.round(agoSec/3600)}h ago`) : '';
+      detail = `${area} — ${owner}${agoStr ? ' · ' + agoStr : ''}`;
+      ts = '';
+    } else {
+      const attacker = b.new_town_name || b.new_alliance_name || '?';
+      const defender = b.old_town_name || b.old_alliance_name || '?';
+      detail = b.territory_won_by === 'attacker'
+        ? `${attacker} seized ${area} from ${defender}`
+        : b.territory_won_by === 'defender'
+        ? `${defender} held ${area}`
+        : `Standoff at ${area}`;
+      ts = b.detected_ts ? new Date(b.detected_ts * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
+    }
+    return `<div class="reel-item ${cls}">
+      <span class="reel-dot"></span>
+      <div class="reel-body">
+        <span class="reel-label">${lbl}${world ? ' ' + world : ''}</span>
+        <span class="reel-detail">${detail}</span>
+        ${ts ? `<span class="reel-ts">${ts}</span>` : ''}
+      </div>
+    </div>`;
+  }
+
+  async function load() {
+    try {
+      const data = await fetch('/api/battles').then(r => r.json());
+      // Prefer real battle events; fall back to snapshot activity
+      const battleEvents = [...(data.recent_battles||[]), ...(data.top_alliance_battles||[]), ...(data.rivina_battles||[])];
+      const seen = new Set();
+      const deduped = battleEvents.filter(b => { if(seen.has(b.id)) return false; seen.add(b.id); return true; });
+      const battles = deduped.length ? deduped : (data.recent_activity || []);
+      if (!battles.length) {
+        reel.innerHTML = `<div class="reel-item won-unknown"><span class="reel-dot"></span><div class="reel-body"><span class="reel-detail">Loading battle data...</span></div></div>`;
+      } else {
+        reel.innerHTML = battles.map(reelItem).join('');
+      }
+      wrap.style.display = 'flex';
+    } catch (_) {}
+  }
+
+  await load();
+  setInterval(load, 5 * 60 * 1000);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/*  MAP PAGE                                                                  */
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+function selectMap(btn) {
+  document.querySelectorAll('.map-pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  const frame = document.getElementById('mapFrame');
+  if (frame) frame.src = btn.dataset.map;
+}
+
+function initMap() {
+  // Map page is purely HTML-driven via onclick; nothing async needed.
+  // Active pill is already set in HTML.
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/*  FOUNDERS PAGE                                                             */
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+async function initFounders() {
+  const grid = document.getElementById('foundersGrid');
+  if (!grid) return;
+  try {
+    const founders = await fetch('/api/founders').then(r => r.json());
+    if (!founders.length) {
+      grid.innerHTML = '<div class="founders-empty">No founders listed yet.</div>';
+      return;
+    }
+    grid.innerHTML = founders.map(f => {
+      // Use full body render for generals (100px wide), avatar for others
+      const isGeneral = f.rank === 'GENERAL';
+      const headUrl = f.uuid
+        ? (isGeneral
+            ? `https://mc-heads.net/body/${f.uuid}/100`
+            : `https://mc-heads.net/avatar/${f.uuid}/80`)
+        : '';
+      const imgEl = headUrl
+        ? `<div class="founder-avatar-wrap ${isGeneral ? 'founder-general' : ''}">
+             <img class="founder-avatar" src="${headUrl}" alt="${f.name || ''}" onerror="this.parentElement.style.display='none'">
+             ${isGeneral ? `<div class="founder-rank-badge">⚔ GENERAL</div>` : ''}
+           </div>`
+        : '';
+      return `
+        <div class="founder-card ${isGeneral ? 'founder-card--general' : ''}">
+          ${imgEl}
+          <div class="founder-info">
+            <div class="founder-name">${f.name || 'Unknown'}</div>
+            ${f.title ? `<div class="founder-title">${f.title}</div>` : ''}
+            ${f.note  ? `<div class="founder-note">${f.note}</div>`  : ''}
+          </div>
+        </div>`;
+    }).join('');
+  } catch (_) {
+    grid.innerHTML = '<div class="founders-empty">Failed to load founders.</div>';
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/*  TERRITORIES / WAR ROOM PAGE                                               */
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+let _battleData = null;
+
+function terrTab(btn) {
+  document.querySelectorAll('.terr-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  if (_battleData) renderTerrFeed(_battleData, btn.dataset.tab);
+}
+
+function terrClass(b) {
+  if (b.territory_won_by === 'attacker') return 'won-attacker';
+  if (b.territory_won_by === 'defender') return 'won-defender';
+  if (b.mutator === 'rivina' || b.world === 'rivina') return 'won-rivina';
+  return 'won-unknown';
+}
+function terrLabel(b) {
+  if (b.territory_won_by === 'attacker') return 'CAPTURED';
+  if (b.territory_won_by === 'defender') return 'DEFENDED';
+  if (b.territory_won_by === 'activity') return 'BATTLE';
+  if (b.mutator === 'rivina' || b.world === 'rivina') return 'RIVINA';
+  return 'STANDOFF';
+}
+
+function terrCardHTML(b) {
+  const cls   = terrClass(b);
+  const lbl   = terrLabel(b);
+  const area  = b.area_name || `T-${b.territory_num}`;
+  const world = (b.world_display || b.world || '').toUpperCase();
+  let title = '', sub = '', ts = '', delta = '';
+
+  if (b.territory_won_by === 'activity') {
+    const owner  = b.alliance_name || b.town_name || 'Unknown';
+    const agoSec = b.last_battle_ts ? Math.round(Date.now()/1000 - b.last_battle_ts) : null;
+    const agoStr = agoSec != null
+      ? (agoSec < 3600 ? `${Math.round(agoSec/60)}m ago` : agoSec < 86400 ? `${Math.round(agoSec/3600)}h ago` : `${Math.round(agoSec/86400)}d ago`)
+      : '';
+    title = `Battle at ${area}`;
+    sub   = `Held by ${owner}${agoStr ? ' · ' + agoStr : ''}`;
+    ts    = b.last_battle_ts ? new Date(b.last_battle_ts * 1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+  } else {
+    const attacker = b.new_town_name || b.new_alliance_name || b.new_town_id || '?';
+    const defender = b.old_town_name || b.old_alliance_name || b.old_town_id || '?';
+    if (b.territory_won_by === 'attacker') {
+      title = `${attacker} seized ${area}`;
+      sub   = `Taken from ${defender}`;
+    } else if (b.territory_won_by === 'defender') {
+      title = `${defender} held ${area}`;
+      sub   = `Repelled attackers`;
+    } else {
+      title = `Standoff at ${area}`;
+      sub   = `${attacker} vs ${defender}`;
+    }
+    ts = b.detected_ts ? new Date(b.detected_ts * 1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+    delta = b.strength_delta != null
+      ? `<span class="terr-card-delta ${b.strength_delta >= 0 ? 'pos' : 'neg'}">${b.strength_delta >= 0 ? '+' : ''}${b.strength_delta.toLocaleString()} CS</span>`
+      : '';
+  }
+
+  return `<div class="terr-card ${cls}">
+    <div class="terr-card-badge">${lbl}</div>
+    <div class="terr-card-body">
+      <div class="terr-card-title">${title}</div>
+      <div class="terr-card-sub">${sub}</div>
+    </div>
+    <div class="terr-card-meta">
+      ${world ? `<span class="terr-card-world">${world}</span>` : ''}
+      ${delta}
+      ${ts ? `<span class="terr-card-ts">${ts}</span>` : ''}
+    </div>
+  </div>`;
+}
+
+function renderTerrFeed(data, tab) {
+  const feed = document.getElementById('terrFeed');
+  if (!feed) return;
+  let battles;
+  if (tab === 'recent') {
+    // Prefer real battle events; fall back to snapshot activity
+    battles = (data.recent_battles||[]).length ? data.recent_battles : (data.recent_activity||[]);
+  } else if (tab === 'top') {
+    battles = (data.top_alliance_battles||[]).length ? data.top_alliance_battles : (data.recent_activity||[]);
+  } else if (tab === 'rivina') {
+    battles = data.rivina_battles || [];
+  } else {
+    battles = data.no_transfer_battles || [];
+  }
+
+  if (!battles.length) {
+    feed.innerHTML = '<div class="terr-empty">No battles found in this category.</div>';
+    return;
+  }
+  feed.innerHTML = battles.map(terrCardHTML).join('');
+}
+
+async function initTerritories() {
+  const feed = document.getElementById('terrFeed');
+  if (!feed) return;
+  try {
+    const data = await fetch('/api/battles').then(r => r.json());
+    _battleData = data;
+
+    // Stats
+    const recent = data.recent_battles || [];
+    const captures = recent.filter(b => b.territory_won_by === 'attacker').length;
+    const defenses = recent.filter(b => b.territory_won_by === 'defender').length;
+    const rivina = (data.rivina_battles || []).length;
+    const el = id => document.getElementById(id);
+    if (el('statTotalBattles')) el('statTotalBattles').textContent = recent.length;
+    if (el('statCaptures'))    el('statCaptures').textContent = captures;
+    if (el('statDefenses'))    el('statDefenses').textContent = defenses;
+    if (el('statRivina'))      el('statRivina').textContent = rivina;
+
+    // Render default tab
+    renderTerrFeed(data, 'recent');
+  } catch(e) {
+    feed.innerHTML = '<div class="terr-empty">Failed to load battle data.</div>';
+  }
+}
+
 /* ── router ──────────────────────────────────────────────────────────────── */
-if      (document.getElementById('itemGrid'))     initIndex();
-else if (document.getElementById('zoneBody'))     initItem();
-else if (document.getElementById('allianceGrid')) initAlliances();
-else if (document.getElementById('townContent'))  initTowns();
+if      (document.getElementById('announcementBar')) { initAnnouncement(); initBattleReel(); }
+else if (document.getElementById('itemGrid'))      { initIndex(); }
+else if (document.getElementById('zoneBody'))      initItem();
+else if (document.getElementById('allianceGrid'))  initAlliances();
+else if (document.getElementById('townContent'))   initTowns();
+else if (document.getElementById('mapFrame'))      initMap();
+else if (document.getElementById('foundersGrid'))  initFounders();
+else if (document.getElementById('terrFeed'))      initTerritories();

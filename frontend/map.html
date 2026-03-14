@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World Map — StromgardeBot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-brand" onclick="location.href='/'">
+    <span class="brand-icon">⚔</span>
+    <span class="brand-text">STROMGARDEBOT</span>
+  </div>
+  <div class="nav-links">
+    <a href="/market.html" class="nav-link">Market</a>
+    <a href="/alliances.html" class="nav-link">Alliances</a>
+    <a href="/towns.html" class="nav-link">Towns</a>
+    <a href="/map" class="nav-link active">Map</a>
+    <a href="/founders" class="nav-link">Founders</a>
+    <a href="/territories" class="nav-link">War Room</a>
+  </div>
+</nav>
+
+<div class="map-page-content">
+  <div class="map-continent-pills">
+    <button class="map-pill active" data-map="https://lokamc.com/map?c=kalros"  onclick="selectMap(this)">🌿 Kalros</button>
+    <button class="map-pill" data-map="https://lokamc.com/map?c=ascalon" onclick="selectMap(this)">⚔️ Ascalon</button>
+    <button class="map-pill" data-map="https://lokamc.com/map?c=garama"  onclick="selectMap(this)">🔥 Garama</button>
+    <button class="map-pill" data-map="https://lokamc.com/map?c=balak"   onclick="selectMap(this)">🌑 Balak</button>
+    <button class="map-pill" data-map="https://lokamc.com/map?c=rivina"  onclick="selectMap(this)">❄️ Rivina</button>
+  </div>
+  <div class="map-iframe-wrap">
+    <iframe id="mapFrame" src="https://lokamc.com/map?c=kalros" allowfullscreen title="Loka World Map"></iframe>
+  </div>
+</div>
+
+<footer class="footer">
+  StromgardeBot &nbsp;•&nbsp; Data from <a href="https://lokamc.com" target="_blank">LokaMinecraft</a>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
