@@ -1918,19 +1918,21 @@ async function loadLeaderboard() {
       lb.innerHTML = '<div class="players-lb-loading">No data yet — search a player to add them.</div>';
       return;
     }
-    const header = _lbSort === 'kda'
-      ? '<div class="plb-filter-note">Minimum 50 kills required · sorted by K/D ratio</div>'
+    const isKda      = _lbSort === 'kda';
+    const isKdaWorst = _lbSort === 'kda_worst';
+    const header = (isKda || isKdaWorst)
+      ? `<div class="plb-filter-note">Minimum 50 kills required · sorted by ${isKdaWorst ? 'lowest' : 'highest'} K/D ratio</div>`
       : '';
     lb.innerHTML = header + rows.map((p, i) => {
       const kdRaw = p.kd_ratio ?? (p.deaths ? (p.kills / p.deaths) : p.kills);
       const kd = Number(kdRaw).toFixed(2);
       const kdCls = _kdClass(kd);
-      const isKda = _lbSort === 'kda';
-      const sortVal = isKda ? kd : (p[_lbSort] ?? p.kills);
+      const sortVal = (isKda || isKdaWorst) ? kd : (p[_lbSort] ?? p.kills);
       const sortLabel = {
-        kills:'Kills', assists:'Assists', kda:'K/D', conquest_wins:'Wins',
+        kills:'Kills', assists:'Assists', kda:'K/D', kda_worst:'K/D', conquest_wins:'Wins',
       }[_lbSort] || 'Kills';
-      const rankCls = i === 0 ? 'plb-row--gold' : i === 1 ? 'plb-row--silver' : i === 2 ? 'plb-row--bronze' : i < 10 ? 'plb-row--elite' : '';
+      // Worst K/D gets no glory effects — plain rows only
+      const rankCls = isKdaWorst ? '' : (i === 0 ? 'plb-row--gold' : i === 1 ? 'plb-row--silver' : i === 2 ? 'plb-row--bronze' : i < 10 ? 'plb-row--elite' : '');
       return `<div class="plb-row ${rankCls}" onclick="showPlayerCard('${p.uuid}')">
         <span class="plb-rank">#${i + 1}</span>
         <img class="plb-head" src="https://mc-heads.net/avatar/${p.name}/36" alt="">
