@@ -741,6 +741,66 @@ def top_players():
     _cache_set("players", results)
     return jsonify(results)
 
+# ── api: top sellers leaderboard ──────────────────────────────────────────────
+@app.route("/api/sellers")
+def top_sellers():
+    cached = _cache_get("sellers")
+    if cached:
+        return jsonify(cached)
+
+    conn = get_db()
+    c    = conn.cursor()
+
+    sellers = c.execute("""
+        SELECT seller_uuid,
+               SUM(price)  AS total_earned,
+               COUNT(*)    AS trade_count
+        FROM   trades
+        WHERE  seller_uuid IS NOT NULL
+        GROUP  BY seller_uuid
+        ORDER  BY total_earned DESC
+        LIMIT  50
+    """).fetchall()
+
+    if not sellers:
+        conn.close()
+        return jsonify([])
+
+    uuids = [s["seller_uuid"] for s in sellers]
+
+    ph   = ",".join("?" * len(uuids))
+    favs = c.execute(f"""
+        SELECT seller_uuid, item, COUNT(*) AS cnt
+        FROM   trades
+        WHERE  seller_uuid IN ({ph})
+        GROUP  BY seller_uuid, item
+        ORDER  BY seller_uuid, cnt DESC
+    """, uuids).fetchall()
+
+    conn.close()
+
+    fav_item: dict[str, str] = {}
+    for row in favs:
+        if row["seller_uuid"] not in fav_item:
+            fav_item[row["seller_uuid"]] = row["item"]
+
+    names = resolve_uuids(uuids)
+
+    results = [
+        {
+            "rank":         i + 1,
+            "uuid":         uid,
+            "name":         names.get(uid, uid[:8] + "…"),
+            "total_earned": round(s["total_earned"], 2),
+            "trade_count":  s["trade_count"],
+            "fav_item":     fav_item.get(uid),
+        }
+        for i, (s, uid) in enumerate(zip(sellers, uuids))
+    ]
+
+    _cache_set("sellers", results)
+    return jsonify(results)
+
 # ── world / area name display maps ────────────────────────────────────────────
 WORLD_DISPLAY = {
     'north':  'Kalros',
