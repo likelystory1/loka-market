@@ -1567,6 +1567,7 @@ function renderFightDetail(fight, filename) {
       return `
         <div class="fight-player-row ${teamClass}-row" onclick="openFightPlayerModal('${p.name}', '${teamLabel}')">
           <div class="fight-player-rank ${rClass}">${rLabel}</div>
+          <img class="fight-player-head" src="https://mc-heads.net/avatar/${encodeURIComponent(p.name)}/24" alt="" loading="lazy">
           <div class="fight-player-info">
             <div class="fight-player-name">${p.name}</div>
             <div class="fight-player-town">${p.town}</div>
@@ -1608,11 +1609,15 @@ function renderFightDetail(fight, filename) {
     <div class="fight-teams-grid">
       <div class="fight-team-panel fight-team-panel--att">
         <div class="fight-team-header fight-team-header--att">
-          ⚔ Attackers <span class="fight-team-count">${fight.attackers.length} players</span>
+          <div class="fight-team-header-main">
+            ⚔ ${[...new Set(fight.attackers.map(p => p.town).filter(Boolean))].join(', ') || 'Attackers'}
+          </div>
+          <span class="fight-team-count">${fight.attackers.length} players</span>
         </div>
         ${fight.attacker_totals ? renderTeamTotals(fight.attacker_totals, 'att') : ''}
         <div class="fight-leaderboard-header">
           <span class="lbh-rank">Rank</span>
+          <span></span>
           <span class="lbh-name">Player</span>
           <span class="lbh-kda">K/D/A</span>
           <span class="lbh-dmg">Dmg</span>
@@ -1624,11 +1629,15 @@ function renderFightDetail(fight, filename) {
 
       <div class="fight-team-panel fight-team-panel--def">
         <div class="fight-team-header fight-team-header--def">
-          🛡 Defenders <span class="fight-team-count">${fight.defenders.length} players</span>
+          <div class="fight-team-header-main">
+            🛡 ${[...new Set(fight.defenders.map(p => p.town).filter(Boolean))].join(', ') || 'Defenders'}
+          </div>
+          <span class="fight-team-count">${fight.defenders.length} players</span>
         </div>
         ${fight.defender_totals ? renderTeamTotals(fight.defender_totals, 'def') : ''}
         <div class="fight-leaderboard-header">
           <span class="lbh-rank">Rank</span>
+          <span></span>
           <span class="lbh-name">Player</span>
           <span class="lbh-kda">K/D/A</span>
           <span class="lbh-dmg">Dmg</span>
