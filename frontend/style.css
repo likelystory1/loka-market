@@ -1475,9 +1475,34 @@ img { display: block; }
 .founder-name  { font-size: 18px; font-weight: 800; color: var(--text); }
 .founder-title { font-size: 12px; color: var(--yellow); font-weight: 600; letter-spacing: .02em; }
 .founder-note  { font-size: 13px; color: var(--muted); line-height: 1.65; }
-.founders-empty {
-  text-align: center; padding: 60px 0; color: var(--muted); font-size: 14px;
+.founders-empty { text-align: center; padding: 60px 0; color: var(--muted); font-size: 14px; }
+
+.founders-grid-inner { display: flex; flex-direction: column; gap: 16px; margin-bottom: 48px; }
+
+.founders-section-header { margin-bottom: 20px; }
+.founders-section-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px; letter-spacing: .08em; color: var(--yellow);
+  text-transform: uppercase; margin-bottom: 6px;
 }
+.founders-section-sub { font-size: 13px; color: var(--muted); }
+
+.founders-section-header--traitor { margin-top: 16px; }
+.founders-section-title--traitor { color: #f87171; }
+
+.founder-card--traitor {
+  border-color: rgba(248,113,113,.2);
+  background: rgba(248,113,113,.04);
+}
+.founder-card--traitor:hover {
+  border-color: #f87171;
+  box-shadow: 0 8px 32px rgba(0,0,0,.45), 0 0 0 1px rgba(248,113,113,.18);
+}
+.founder-traitor-wrap .founder-avatar { filter: grayscale(60%); border: 2px solid rgba(248,113,113,.3); }
+.founder-rank-badge--traitor {
+  color: #f87171; background: rgba(248,113,113,.12); border-color: rgba(248,113,113,.3);
+}
+.founder-name--traitor { color: #f87171; }
 
 /* ── Stromgarde History Section ───────────────────────────────────────────── */
 .stromgarde-history {

@@ -1319,13 +1319,16 @@ async function initFounders() {
   const grid = document.getElementById('foundersGrid');
   if (!grid) return;
   try {
-    const founders = await fetch('/api/founders').then(r => r.json());
-    if (!founders.length) {
+    const all = await fetch('/api/founders').then(r => r.json());
+    if (!all.length) {
       grid.innerHTML = '<div class="founders-empty">No founders listed yet.</div>';
       return;
     }
-    grid.innerHTML = founders.map(f => {
-      // Use full body render for generals (100px wide), avatar for others
+
+    const founders = all.filter(f => f.type !== 'traitor');
+    const traitors = all.filter(f => f.type === 'traitor');
+
+    const renderCard = (f, isTraitor = false) => {
       const isGeneral = f.rank === 'GENERAL';
       const headUrl = f.uuid
         ? (isGeneral
@@ -1333,21 +1336,37 @@ async function initFounders() {
             : `https://mc-heads.net/avatar/${f.uuid}/80`)
         : '';
       const imgEl = headUrl
-        ? `<div class="founder-avatar-wrap ${isGeneral ? 'founder-general' : ''}">
+        ? `<div class="founder-avatar-wrap ${isGeneral ? 'founder-general' : ''} ${isTraitor ? 'founder-traitor-wrap' : ''}">
              <img class="founder-avatar" src="${headUrl}" alt="${f.name || ''}" onerror="this.parentElement.style.display='none'">
-             ${isGeneral ? `<div class="founder-rank-badge">⚔ GENERAL</div>` : ''}
+             ${isTraitor ? `<div class="founder-rank-badge founder-rank-badge--traitor">✦ TRAITOR</div>` : isGeneral ? `<div class="founder-rank-badge">⚔ GENERAL</div>` : ''}
            </div>`
         : '';
       return `
-        <div class="founder-card ${isGeneral ? 'founder-card--general' : ''}">
+        <div class="founder-card ${isGeneral ? 'founder-card--general' : ''} ${isTraitor ? 'founder-card--traitor' : ''}">
           ${imgEl}
           <div class="founder-info">
-            <div class="founder-name">${f.name || 'Unknown'}</div>
+            <div class="founder-name ${isTraitor ? 'founder-name--traitor' : ''}">${f.name || 'Unknown'}</div>
             ${f.title ? `<div class="founder-title">${f.title}</div>` : ''}
             ${f.note  ? `<div class="founder-note">${f.note}</div>`  : ''}
           </div>
         </div>`;
-    }).join('');
+    };
+
+    grid.innerHTML = `
+      <div class="founders-section-header">
+        <div class="founders-section-title">Pieces of the Stromgarde War Machine</div>
+      </div>
+      <div class="founders-grid-inner">
+        ${founders.map(f => renderCard(f, false)).join('')}
+      </div>
+      ${traitors.length ? `
+      <div class="founders-section-header founders-section-header--traitor">
+        <div class="founders-section-title founders-section-title--traitor">Enemies of Stromgarde</div>
+        <div class="founders-section-sub">These individuals betrayed the realm. Their names are remembered so they are never forgotten.</div>
+      </div>
+      <div class="founders-grid-inner">
+        ${traitors.map(f => renderCard(f, true)).join('')}
+      </div>` : ''}`;
   } catch (_) {
     grid.innerHTML = '<div class="founders-empty">Failed to load founders.</div>';
   }
