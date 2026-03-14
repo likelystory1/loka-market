@@ -373,12 +373,14 @@ _active_fight_lock       = threading.Lock()
 def _poll_active_fights() -> int:
     """Download + parse any active conquest fight logs. Returns count of active fights."""
     try:
-        req  = urllib.request.Request(
-            'https://api.lokamc.com/territories/search/findBattles?size=100',
+        req = urllib.request.Request(
+            'https://api.lokamc.com/territories?size=600',
             headers={'User-Agent': 'LokaUtils/1.0'})
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
-        territories = data.get('_embedded', {}).get('territories', [])
+        all_territories = data.get('_embedded', {}).get('territories', [])
+        # Filter to only those with an active battleZone and a log filename
+        territories = [t for t in all_territories if t.get('battleZone') and t['battleZone'].get('log')]
     except Exception as e:
         print(f'[fights-poll] fetch failed: {e}')
         return 0
@@ -930,6 +932,19 @@ ensure_battle_tables()
 threading.Thread(target=_warmup,          daemon=True).start()
 threading.Thread(target=_loka_cache_loop, daemon=True).start()
 threading.Thread(target=_fight_poll_loop, daemon=True).start()
+
+def _get_alliances_for_poller():
+    """Return alliances list from the loka cache file."""
+    try:
+        with _loka_lock:
+            with open(LOKA_CACHE_ALLIANCES) as f:
+                data = json.load(f)
+        return data.get('_embedded', {}).get('alliances', [])
+    except Exception:
+        return []
+
+from territory_poller import start_territory_poller
+start_territory_poller(_get_alliances_for_poller)
 
 if __name__ == "__main__":
     # For local dev only — production uses gunicorn (see gunicorn.conf.py)
