@@ -1889,9 +1889,10 @@ async function loadLeaderboard() {
     }
     lb.innerHTML = rows.map((p, i) => {
       const kd = p.deaths ? (p.kills / p.deaths).toFixed(2) : p.kills.toFixed(2);
-      const sortVal = p[_lbSort] ?? p.kills;
+      const isKda = _lbSort === 'kda';
+      const sortVal = isKda ? kd : (p[_lbSort] ?? p.kills);
       const sortLabel = {
-        kills:'Kills', assists:'Assists', conquest_wins:'Wins',
+        kills:'Kills', assists:'Assists', kda:'K/D', conquest_wins:'Wins',
         golems:'Golems', potions:'Potions',
       }[_lbSort] || 'Kills';
       return `<div class="plb-row" onclick="showPlayerCard('${p.uuid}')">
@@ -1899,8 +1900,8 @@ async function loadLeaderboard() {
         <img class="plb-head" src="https://mc-heads.net/avatar/${p.name}/24" alt="">
         <span class="plb-name">${p.name}</span>
         <span class="plb-alliance">${p.alliance || ''}</span>
-        <span class="plb-stat"><span class="plb-stat-val">${sortVal?.toLocaleString?.() ?? sortVal}</span><span class="plb-stat-label">${sortLabel}</span></span>
-        <span class="plb-kd" title="K/D">${kd}</span>
+        <span class="plb-stat"><span class="plb-stat-val">${isKda ? sortVal : (sortVal?.toLocaleString?.() ?? sortVal)}</span><span class="plb-stat-label">${sortLabel}</span></span>
+        ${!isKda ? `<span class="plb-kd" title="K/D">${kd}</span>` : ''}
       </div>`;
     }).join('');
   } catch {
@@ -2135,6 +2136,5 @@ async function updateScrapeProgress() {
 
 async function initPlayersPage() {
   await loadLeaderboard();
-  await updateScrapeProgress();
-  setInterval(() => { updateScrapeProgress(); loadLeaderboard(); }, 30000);
+  setInterval(() => { loadLeaderboard(); }, 30000);
 }

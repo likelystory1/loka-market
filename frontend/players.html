@@ -44,14 +44,6 @@
 <!-- Player card (shown after search) -->
 <div id="playerCard" class="player-card" style="display:none"></div>
 
-<!-- Scrape progress bar -->
-<div class="players-progress-wrap" id="progressWrap" style="display:none">
-  <div class="players-progress-label" id="progressLabel"></div>
-  <div class="players-progress-bar-bg">
-    <div class="players-progress-bar" id="progressBar"></div>
-  </div>
-</div>
-
 <!-- Leaderboard -->
 <div class="players-lb-wrap">
   <div class="players-lb-header">
@@ -59,6 +51,7 @@
     <div class="players-sort-tabs">
       <button class="ps-tab active" onclick="setLbSort('kills',this)">Kills</button>
       <button class="ps-tab" onclick="setLbSort('assists',this)">Assists</button>
+      <button class="ps-tab" onclick="setLbSort('kda',this)">K/D</button>
       <button class="ps-tab" onclick="setLbSort('conquest_wins',this)">Wins</button>
       <button class="ps-tab" onclick="setLbSort('golems',this)">Golems</button>
       <button class="ps-tab" onclick="setLbSort('potions',this)">Potions</button>
