@@ -49,28 +49,44 @@ img { display: block; }
 /* ── navbar ──────────────────────────────────────────────────────────────── */
 .navbar {
   position: sticky; top: 0; z-index: 100;
-  background: rgba(7,12,20,.92);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border);
-  background-image: linear-gradient(to bottom, rgba(96,165,250,.04) 0%, transparent 100%);
-  padding: 0 24px; height: 56px;
+  background: rgba(7,12,20,.95);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(96,165,250,.12);
+  box-shadow: 0 1px 24px rgba(0,0,0,.35);
+  padding: 0 28px; height: 60px;
   display: flex; align-items: center; justify-content: space-between;
 }
 .nav-brand {
   display: flex; align-items: center; gap: 10px; cursor: pointer;
+  text-decoration: none;
 }
-.brand-icon { height: 24px; width: 24px; object-fit: contain; vertical-align: middle; }
+.nav-brand:hover .brand-text { text-shadow: 0 0 28px rgba(96,165,250,.7); }
+.brand-icon { height: 26px; width: 26px; object-fit: contain; vertical-align: middle; }
 .brand-text {
   font-family: 'Press Start 2P', monospace;
-  font-size: 13px; color: var(--accent); letter-spacing: .5px;
+  font-size: 12px; color: var(--accent); letter-spacing: .5px;
   text-shadow: 0 0 20px rgba(96,165,250,.4);
+  transition: text-shadow .2s;
 }
-.nav-links { display: flex; gap: 4px; }
+.nav-links { display: flex; gap: 2px; align-items: center; }
 .nav-link {
-  padding: 6px 14px; border-radius: var(--radius);
-  color: var(--muted); font-size: 13px; font-weight: 500; transition: all .15s;
+  position: relative;
+  padding: 7px 13px; border-radius: 8px;
+  color: var(--muted); font-size: 12.5px; font-weight: 500;
+  letter-spacing: .01em;
+  transition: color .15s, background .15s;
 }
-.nav-link:hover, .nav-link.active { color: var(--text); background: var(--surface2); }
+.nav-link::after {
+  content: '';
+  position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%);
+  width: 0; height: 2px;
+  background: var(--accent); border-radius: 2px;
+  transition: width .2s ease;
+}
+.nav-link:hover { color: var(--text); background: rgba(255,255,255,.05); }
+.nav-link:hover::after { width: 60%; }
+.nav-link.active { color: var(--accent); background: rgba(96,165,250,.1); font-weight: 600; }
+.nav-link.active::after { width: 60%; }
 
 /* ── stats strip ─────────────────────────────────────────────────────────── */
 .stats-strip {
@@ -433,7 +449,7 @@ img { display: block; }
 
 /* ── responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .navbar { padding: 0 16px; }
+  .navbar { padding: 0 16px; height: 56px; }
   .brand-text { font-size: 10px; }
   .stats-strip { padding: 12px 16px; gap: 24px; }
   .main-content { padding: 16px; }
