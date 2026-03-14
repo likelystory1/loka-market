@@ -12,7 +12,6 @@ from flask import Flask, jsonify, send_from_directory, request, abort
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from territory_poller import start_territory_poller
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
@@ -21,7 +20,7 @@ TERRITORIES_DB  = os.path.join(BASE_DIR, "territories.db")
 FRONTEND        = os.path.join(BASE_DIR, "..", "frontend")
 
 # ── app ───────────────────────────────────────────────────────────────────────
-app = Flask(__name__)
+app = Flask(__name__, static_folder=None)
 
 # Restrict CORS to GET/HEAD/OPTIONS only — no write methods from any origin
 CORS(app, resources={r"/api/*": {
@@ -803,26 +802,12 @@ def loka_proxy(path):
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
-# ── alliances cache getter (for territory poller) ─────────────────────────────
-def _get_alliances_cache():
-    """Return the cached alliances list for the territory poller."""
-    try:
-        if os.path.exists(LOKA_CACHE_ALLIANCES):
-            with _loka_lock:
-                with open(LOKA_CACHE_ALLIANCES) as f:
-                    data = json.load(f)
-            return data.get('_embedded', {}).get('alliances', [])
-    except Exception:
-        pass
-    return []
-
 # ── startup ───────────────────────────────────────────────────────────────────
 import database as _db_module; _db_module.init_db()
 ensure_indexes()
 ensure_battle_tables()
 threading.Thread(target=_warmup,          daemon=True).start()
 threading.Thread(target=_loka_cache_loop, daemon=True).start()
-start_territory_poller(_get_alliances_cache)
 
 if __name__ == "__main__":
     # For local dev only — production uses gunicorn (see gunicorn.conf.py)
