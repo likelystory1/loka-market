@@ -1492,46 +1492,84 @@ let currentFightData = null;
 
 async function initFightsPage() {
   if (!document.getElementById('fightList')) return;
+  await _refreshFightList();
+  // Auto-refresh every 15s to pick up live fight updates
+  setInterval(_refreshFightList, 15000);
+}
+
+async function _refreshFightList() {
   try {
     const fights = await fetch('/api/fights').then(r => r.json());
-    renderFightList(fights);
+    // Only re-render the list if we're not viewing a fight detail
+    if (document.getElementById('fightList').style.display !== 'none') {
+      renderFightList(fights);
+    } else {
+      _allFights = fights; // keep cached for when user goes back
+    }
   } catch (e) {
-    document.getElementById('fightList').innerHTML = '<div class="empty-state">Failed to load fights.</div>';
+    if (!_allFights.length)
+      document.getElementById('fightList').innerHTML = '<div class="empty-state">Failed to load fights.</div>';
   }
 }
 
+let _allFights = [];
+let _fightSort = 'kills';
+
 function renderFightList(fights) {
+  _allFights = fights;
   const el = document.getElementById('fightList');
   if (!fights.length) {
     el.innerHTML = '<div class="empty-state">No fight logs found.</div>';
     return;
   }
+  const sorted = _sortedFights(fights, _fightSort);
   el.innerHTML = `
+    <div class="fight-list-controls">
+      <span class="fight-sort-label">Sort:</span>
+      ${['kills','date'].map(s => `
+        <button class="fight-sort-btn ${_fightSort===s?'active':''}" onclick="setFightSort('${s}')">${s==='kills'?'Most Kills':'Newest'}</button>
+      `).join('')}
+    </div>
     <div class="fights-grid">
-      ${fights.map(f => {
-        const winnerLabel = f.winner === 'attackers' ? 'Attackers Win' : f.winner === 'defenders' ? 'Defenders Win' : f.winner;
-        const winnerClass = f.winner === 'attackers' ? 'fight-winner--att' : 'fight-winner--def';
+      ${sorted.map(f => {
+        const winnerLabel = f.winner === 'attackers' ? 'Attackers Win' : f.winner === 'defenders' ? 'Defenders Win' : 'In Progress';
+        const winnerClass = f.winner === 'attackers' ? 'fight-winner--att' : f.winner === 'defenders' ? 'fight-winner--def' : 'fight-winner--live';
+        const title = f.location && f.territory_num
+          ? `Battle For ${f.location} ${f.territory_num}`
+          : (f.location || f.filename.replace('.txt','').replace(/_/g,' '));
+        const meta = [f.world, f.time_display, f.date_display, (f.total_players||0)+' players'].filter(Boolean).join(' · ');
         return `
           <div class="fight-card" onclick="openFight('${f.filename}')">
             <div class="fight-card-header">
-              <div class="fight-card-name">${f.display_name}</div>
+              <div class="fight-card-name">${title}</div>
               <div class="fight-winner-badge ${winnerClass}">${winnerLabel}</div>
             </div>
-            <div class="fight-card-meta">
-              <span class="fight-meta-item">📍 ${f.location}</span>
-              <span class="fight-meta-item">⏱ ${f.duration}</span>
-            </div>
+            <div class="fight-card-meta">${meta}</div>
             <div class="fight-card-teams">
               <div class="fight-team-pill fight-team-pill--att">
-                ⚔ ${f.attacker_count} attackers · ${f.attacker_kills}K
+                ⚔ ${f.attacker_town || 'Attackers'} · ${f.attacker_kills}K
               </div>
               <div class="fight-team-pill fight-team-pill--def">
-                🛡 ${f.defender_count} defenders · ${f.defender_kills}K
+                🛡 ${f.defender_town || 'Defenders'} · ${f.defender_kills}K
               </div>
             </div>
           </div>`;
       }).join('')}
     </div>`;
+}
+
+function _sortedFights(fights, sort) {
+  const f = [...fights];
+  if (sort === 'kills') {
+    f.sort((a, b) => (b.attacker_kills + b.defender_kills) - (a.attacker_kills + a.defender_kills));
+  }
+  // 'date' keeps server order (newest first by mtime)
+  return f;
+}
+
+function setFightSort(sort) {
+  _fightSort = sort;
+  renderFightList(_allFights);
 }
 
 async function openFight(filename) {
@@ -1554,13 +1592,32 @@ function backToFightList() {
   currentFightData = null;
 }
 
+let _playerSort = 'kills';
+
+function setPlayerSort(sort) {
+  _playerSort = sort;
+  if (currentFightData) renderFightDetail(currentFightData, currentFightData.filename);
+}
+
+function _sortPlayers(players, sort) {
+  const p = [...players];
+  if (sort === 'damage') p.sort((a, b) => b.damage_dealt - a.damage_dealt);
+  else if (sort === 'name') p.sort((a, b) => a.name.localeCompare(b.name));
+  else p.sort((a, b) => b.kills - a.kills || b.assists - a.assists || b.damage_dealt - a.damage_dealt);
+  return p;
+}
+
 function renderFightDetail(fight, filename) {
   const winnerLabel = fight.winner === 'attackers' ? 'Attackers' : fight.winner === 'defenders' ? 'Defenders' : fight.winner;
   const el = document.getElementById('fightDetail');
+  const title = fight.location && fight.territory_num
+    ? `Battle For ${fight.location} ${fight.territory_num}`
+    : (fight.location || filename.replace('.txt','').replace(/_/g,' '));
 
   const renderLeaderboard = (players, teamClass, teamLabel) => {
     if (!players.length) return `<div class="empty-state">No players.</div>`;
-    return players.map((p, i) => {
+    const sorted = _sortPlayers(players, _playerSort);
+    return sorted.map((p, i) => {
       const rank   = i + 1;
       const rClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : '';
       const rLabel = rank === 1 ? '1ST' : rank === 2 ? '2ND' : rank === 3 ? '3RD' : `#${rank}`;
@@ -1584,6 +1641,14 @@ function renderFightDetail(fight, filename) {
     }).join('');
   };
 
+  const sortControls = `
+    <div class="fight-player-sort">
+      <span class="fight-sort-label">Sort:</span>
+      ${['kills','damage','name'].map(s => `
+        <button class="fight-sort-btn ${_playerSort===s?'active':''}" onclick="setPlayerSort('${s}')">${s==='kills'?'Kills':s==='damage'?'Damage':'Name A–Z'}</button>
+      `).join('')}
+    </div>`;
+
   const renderTeamTotals = (totals, cls) => `
     <div class="fight-team-totals fight-team-totals--${cls}">
       <div class="ftt-item"><span class="ftt-val">${totals.kills}</span><span class="ftt-label">Kills</span></div>
@@ -1595,16 +1660,22 @@ function renderFightDetail(fight, filename) {
       <div class="ftt-item"><span class="ftt-val">${totals.charges}</span><span class="ftt-label">Charges</span></div>
     </div>`;
 
+  const totalPlayers = fight.attackers.length + fight.defenders.length;
+  const metaParts = [fight.world, fight.time_display, fight.date_display, totalPlayers + ' players'].filter(Boolean);
+
   el.innerHTML = `
     <div class="fight-detail-header">
       <button class="back-btn" onclick="backToFightList()">← Back</button>
-      <div class="fight-detail-title">${filename.replace('.txt','').replace(/_/g,' ')}</div>
-      <div class="fight-detail-meta">
-        ${fight.location} &nbsp;·&nbsp; ${fight.duration} &nbsp;·&nbsp;
-        <span class="fight-winner-inline ${fight.winner === 'attackers' ? 'fight-winner--att' : 'fight-winner--def'}">${winnerLabel} Win</span>
-        ${fight.mutator ? `&nbsp;·&nbsp; <span class="fight-mutator">${fight.mutator}</span>` : ''}
+      <div>
+        <div class="fight-detail-title">${title}</div>
+        <div class="fight-detail-meta">
+          ${metaParts.join(' &nbsp;·&nbsp; ')}
+          ${winnerLabel ? `&nbsp;·&nbsp; <span class="fight-winner-inline ${fight.winner === 'attackers' ? 'fight-winner--att' : 'fight-winner--def'}">${winnerLabel} Win</span>` : ''}
+          ${fight.mutator ? `&nbsp;·&nbsp; <span class="fight-mutator">${fight.mutator}</span>` : ''}
+        </div>
       </div>
     </div>
+    ${sortControls}
 
     <div class="fight-teams-grid">
       <div class="fight-team-panel fight-team-panel--att">

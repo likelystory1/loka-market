@@ -1549,9 +1549,17 @@ img { display: block; }
 .fight-winner-badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
 .fight-winner--att { background: rgba(99,102,241,.18); color: #818cf8; border: 1px solid rgba(99,102,241,.3); }
 .fight-winner--def { background: rgba(245,158,11,.15); color: #f59e0b; border: 1px solid rgba(245,158,11,.3); }
+.fight-winner--live { background: rgba(34,197,94,.15); color: #4ade80; border: 1px solid rgba(34,197,94,.3); animation: pulse-live 1.5s ease-in-out infinite; }
+@keyframes pulse-live { 0%,100% { opacity:1; } 50% { opacity:.6; } }
 
-.fight-card-meta { display: flex; gap: 12px; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
-.fight-meta-item { display: flex; align-items: center; gap: 4px; }
+.fight-card-meta { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+
+.fight-list-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.fight-player-sort { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 0 4px; }
+.fight-sort-label { font-size: 11px; color: var(--muted); }
+.fight-sort-btn { background: var(--surface); border: 1px solid var(--border-dim); color: var(--muted); border-radius: 6px; padding: 4px 10px; font-size: 11px; cursor: pointer; transition: all .15s; }
+.fight-sort-btn:hover { border-color: var(--border); color: var(--text); }
+.fight-sort-btn.active { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.4); color: #818cf8; }
 
 .fight-card-teams { display: flex; gap: 8px; flex-wrap: wrap; }
 .fight-team-pill { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
