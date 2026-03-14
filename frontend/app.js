@@ -1920,8 +1920,10 @@ async function loadLeaderboard() {
     }
     const isKda      = _lbSort === 'kda';
     const isKdaWorst = _lbSort === 'kda_worst';
-    const header = (isKda || isKdaWorst)
-      ? `<div class="plb-filter-note">Minimum 50 kills required · sorted by ${isKdaWorst ? 'lowest' : 'highest'} K/D ratio</div>`
+    const header = isKda
+      ? '<div class="plb-filter-note">Minimum 50 kills required · sorted by highest K/D ratio</div>'
+      : isKdaWorst
+      ? '<div class="plb-filter-note">Sorted by lowest K/D ratio</div>'
       : '';
     lb.innerHTML = header + rows.map((p, i) => {
       const kdRaw = p.kd_ratio ?? (p.deaths ? (p.kills / p.deaths) : p.kills);
