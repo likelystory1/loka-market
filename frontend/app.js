@@ -1532,8 +1532,8 @@ function renderFightList(fights) {
     </div>
     <div class="fights-grid">
       ${sorted.map(f => {
-        const winnerLabel = f.winner === 'attackers' ? 'Attackers Win' : f.winner === 'defenders' ? 'Defenders Win' : 'In Progress';
-        const winnerClass = f.winner === 'attackers' ? 'fight-winner--att' : f.winner === 'defenders' ? 'fight-winner--def' : 'fight-winner--live';
+        const winnerLabel = f.is_live ? 'Live' : f.winner === 'attackers' ? 'Attackers Win' : f.winner === 'defenders' ? 'Defenders Win' : '';
+        const winnerClass = f.is_live ? 'fight-winner--live' : f.winner === 'attackers' ? 'fight-winner--att' : 'fight-winner--def';
         const title = f.location && f.territory_num
           ? `Battle For ${f.location} ${f.territory_num}`
           : (f.location || f.filename.replace('.txt','').replace(/_/g,' '));
@@ -1542,7 +1542,7 @@ function renderFightList(fights) {
           <div class="fight-card" onclick="openFight('${f.filename}')">
             <div class="fight-card-header">
               <div class="fight-card-name">${title}</div>
-              <div class="fight-winner-badge ${winnerClass}">${winnerLabel}</div>
+              ${winnerLabel ? `<div class="fight-winner-badge ${winnerClass}">${winnerLabel}</div>` : ''}
             </div>
             <div class="fight-card-meta">${meta}</div>
             <div class="fight-card-teams">
