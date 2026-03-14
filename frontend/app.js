@@ -1929,17 +1929,21 @@ function closeFightPlayerModal() {
 
 let _lbSort = 'kills';
 let _lbDebounce = null;
-let _lbLastLoad = 0;
+const _lbCache = {};       // sort → rendered HTML, persists for the session
+const _lbFetching = {};    // sort → true while in-flight (prevent duplicate requests)
 
 function setLbSort(sort, btn) {
   _lbSort = sort;
   document.querySelectorAll('.ps-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  // Debounce: ignore if same category was loaded in the last 2 seconds
-  const now = Date.now();
-  if (now - _lbLastLoad < 2000) return;
+  // If we already have cached HTML for this sort, show it instantly
+  if (_lbCache[sort]) {
+    document.getElementById('playerLb').innerHTML = _lbCache[sort];
+    return;
+  }
+  // Debounce rapid clicks on the same uncached tab
   clearTimeout(_lbDebounce);
-  _lbDebounce = setTimeout(() => { _lbLastLoad = Date.now(); loadLeaderboard(); }, 200);
+  _lbDebounce = setTimeout(() => loadLeaderboard(), 150);
 }
 
 function _lbSkeleton(n = 10) {
@@ -1962,21 +1966,27 @@ function _kdClass(kd) {
 }
 
 async function loadLeaderboard() {
-  const lb = document.getElementById('playerLb');
+  const lb   = document.getElementById('playerLb');
+  const sort = _lbSort;
   if (!lb) return;
+  if (_lbFetching[sort]) return;   // already in-flight for this sort
+  _lbFetching[sort] = true;
   lb.innerHTML = _lbSkeleton(12);
   try {
-    const rows = await fetch(`/api/eldritch/leaderboard?sort=${_lbSort}&limit=50`).then(r => r.json());
+    const rows = await fetch(`/api/eldritch/leaderboard?sort=${sort}&limit=50`).then(r => r.json());
     if (!rows.length) {
       lb.innerHTML = '<div class="players-lb-loading">No data yet — search a player to add them.</div>';
       return;
     }
     const isKda      = _lbSort === 'kda';
     const isKdaWorst = _lbSort === 'kda_worst';
+    const isCharges  = _lbSort === 'charges';
     const header = isKda
       ? '<div class="plb-filter-note">Minimum 50 kills required · sorted by highest K/D ratio</div>'
       : isKdaWorst
       ? '<div class="plb-filter-note">Sorted by lowest K/D ratio</div>'
+      : isCharges
+      ? '<div class="plb-filter-note">Charges = lamps lit · Completion = lamps ÷ golems</div>'
       : '';
     lb.innerHTML = header + rows.map((p, i) => {
       const kdRaw = p.kd_ratio ?? (p.deaths ? (p.kills / p.deaths) : p.kills);
@@ -1984,10 +1994,21 @@ async function loadLeaderboard() {
       const kdCls = _kdClass(kd);
       const sortVal = (isKda || isKdaWorst) ? kd : (p[_lbSort] ?? p.kills);
       const sortLabel = {
-        kills:'Kills', assists:'Assists', kda:'K/D', kda_worst:'K/D', conquest_wins:'Wins',
+        kills:'Kills', assists:'Assists', kda:'K/D', kda_worst:'K/D',
+        conquest_wins:'Wins', charges:'Charges',
       }[_lbSort] || 'Kills';
       // Worst K/D gets no glory effects — plain rows only
       const rankCls = isKdaWorst ? '' : (i === 0 ? 'plb-row--gold' : i === 1 ? 'plb-row--silver' : i === 2 ? 'plb-row--bronze' : i < 10 ? 'plb-row--elite' : '');
+
+      // Charges tab: show charge rate % instead of K/D
+      const rightCol = isCharges
+        ? (() => {
+            const rate = p.charge_rate != null ? (p.charge_rate * 100).toFixed(1) : '—';
+            const golems = p.golems ?? 0;
+            return `<span class="plb-kd" title="Charge completion rate">${rate}%<span class="plb-stat-label"> / ${golems} golems</span></span>`;
+          })()
+        : `<span class="plb-kd ${kdCls}" title="K/D">${kd}</span>`;
+
       return `<div class="plb-row ${rankCls}" onclick="showPlayerCard('${p.uuid}')">
         <span class="plb-rank">#${i + 1}</span>
         <img class="plb-head" src="https://mc-heads.net/avatar/${p.name}/36" alt="">
@@ -1996,11 +2017,17 @@ async function loadLeaderboard() {
           ${p.alliance ? `<div class="plb-sub">${p.alliance}</div>` : ''}
         </div>
         <span class="plb-stat"><span class="plb-stat-val">${isKda ? sortVal : (sortVal?.toLocaleString?.() ?? sortVal)}</span><span class="plb-stat-label">${sortLabel}</span></span>
-        <span class="plb-kd ${kdCls}" title="K/D">${kd}</span>
+        ${rightCol}
       </div>`;
     }).join('');
+    // Only cache if user hasn't switched away while loading
+    if (_lbSort === sort) {
+      _lbCache[sort] = lb.innerHTML;
+    }
   } catch {
     lb.innerHTML = '<div class="players-lb-loading">Click a category to load leaderboard…</div>';
+  } finally {
+    _lbFetching[sort] = false;
   }
 }
 
