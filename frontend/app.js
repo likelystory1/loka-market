@@ -1875,12 +1875,18 @@ function closeFightPlayerModal() {
 /* ══════════════════════════════════════════════════════════════════════════ */
 
 let _lbSort = 'kills';
+let _lbDebounce = null;
+let _lbLastLoad = 0;
 
 function setLbSort(sort, btn) {
   _lbSort = sort;
   document.querySelectorAll('.ps-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  loadLeaderboard();
+  // Debounce: ignore if same category was loaded in the last 2 seconds
+  const now = Date.now();
+  if (now - _lbLastLoad < 2000) return;
+  clearTimeout(_lbDebounce);
+  _lbDebounce = setTimeout(() => { _lbLastLoad = Date.now(); loadLeaderboard(); }, 200);
 }
 
 function _lbSkeleton(n = 10) {
@@ -1937,7 +1943,7 @@ async function loadLeaderboard() {
       </div>`;
     }).join('');
   } catch {
-    lb.innerHTML = '<div class="players-lb-loading">Failed to load leaderboard.</div>';
+    lb.innerHTML = '<div class="players-lb-loading">Click a category to load leaderboard…</div>';
   }
 }
 
@@ -2100,8 +2106,6 @@ async function searchPlayer() {
     if (p.error) throw new Error(p.error);
     if (status) status.textContent = '';
     renderPlayerCard(p);
-    // Delay slightly so the server's background DB write completes before we re-query
-    setTimeout(loadLeaderboard, 800);
   } catch (e) {
     if (status) {
       status.textContent = e.message?.includes('Mojang') ? 'Player not found' : (e.message || 'Failed to fetch stats');
@@ -2203,6 +2207,5 @@ async function updateScrapeProgress() {
 }
 
 async function initPlayersPage() {
-  await loadLeaderboard();
-  setInterval(() => { loadLeaderboard(); }, 120000); // background refresh every 2 min
+  // Leaderboard loads on tab click only — no auto-refresh
 }
