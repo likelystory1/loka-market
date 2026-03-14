@@ -367,6 +367,9 @@ PARSED_DIR    = os.path.join(FIGHTLOGS_DIR, 'parsed')
 os.makedirs(PARSED_DIR, exist_ok=True)
 
 # ── active fight log poller ───────────────────────────────────────────────────
+_active_fight_logs: set = set()   # stem names currently live from the API
+_active_fight_lock       = threading.Lock()
+
 def _poll_active_fights() -> int:
     """Download + parse any active conquest fight logs. Returns count of active fights."""
     try:
@@ -380,7 +383,7 @@ def _poll_active_fights() -> int:
         print(f'[fights-poll] fetch failed: {e}')
         return 0
 
-    active = 0
+    seen = set()
     for t in territories:
         bz = t.get('battleZone') or t.get('tg', {}).get('battleZone')
         if not bz:
@@ -392,7 +395,8 @@ def _poll_active_fights() -> int:
         txt_path    = os.path.join(FIGHTLOGS_DIR, log_name + '.txt')
         parsed_path = os.path.join(PARSED_DIR, log_name + '.json')
 
-        active += 1
+        seen.add(log_name)
+        active = len(seen)
         try:
             url = f'https://api.lokamc.com/conquestlogs/{log_name}.txt'
             req = urllib.request.Request(url, headers={'User-Agent': 'LokaUtils/1.0'})
@@ -416,7 +420,11 @@ def _poll_active_fights() -> int:
         except Exception as e:
             print(f'[fights-poll] parse {log_name}: {e}')
 
-    return active
+    with _active_fight_lock:
+        _active_fight_logs.clear()
+        _active_fight_logs.update(seen)
+
+    return len(seen)
 
 def _fight_poll_loop():
     while True:
@@ -436,6 +444,8 @@ def api_fights():
             with open(path, encoding='utf-8') as f:
                 d = json.load(f)
             total = len(d.get('attackers', [])) + len(d.get('defenders', []))
+            with _active_fight_lock:
+                is_live = path.stem in _active_fight_logs
             results.append({
                 'filename':       path.stem + '.txt',
                 'json_file':      path.name,
@@ -453,6 +463,7 @@ def api_fights():
                 'attacker_kills': d.get('attacker_kills', 0),
                 'defender_kills': d.get('defender_kills', 0),
                 'total_players':  total,
+                'is_live':        is_live,
             })
         except Exception as e:
             print(f'[fights] error reading {path.name}: {e}')
