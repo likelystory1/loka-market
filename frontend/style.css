@@ -1693,3 +1693,148 @@ img { display: block; }
 .detail-stat-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border-dim); font-size: 13px; }
 .detail-stat-row:last-child { border-bottom: none; }
 .detail-stat-val { font-weight: 600; color: var(--text); }
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/*  PLAYERS PAGE                                                              */
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+.players-page { background: var(--bg); min-height: 100vh; }
+
+.players-header {
+  max-width: 860px; margin: 48px auto 32px; padding: 0 20px; text-align: center;
+}
+.players-title {
+  font-family: 'Press Start 2P', monospace; font-size: 18px;
+  color: var(--accent); margin: 0 0 8px; letter-spacing: .04em;
+}
+.players-sub { color: var(--muted); font-size: 13px; margin: 0 0 28px; }
+.players-sub a { color: var(--accent); text-decoration: none; }
+
+.players-search-wrap { display: flex; gap: 8px; max-width: 480px; margin: 0 auto; }
+.players-search-inner { position: relative; flex: 1; }
+.players-suggestions {
+  display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  z-index: 100; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,.4);
+}
+.players-suggestions.open { display: block; }
+.ps-suggestion {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer;
+  transition: background .12s;
+}
+.ps-suggestion:hover, .ps-suggestion.active { background: rgba(255,255,255,.07); }
+.ps-suggestion img { border-radius: 3px; flex-shrink: 0; }
+.ps-suggestion-name { font-size: 14px; font-weight: 600; }
+.ps-suggestion-alliance { font-size: 11px; color: var(--muted); margin-left: auto; }
+.players-search-input {
+  width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); border-radius: var(--radius); padding: 10px 14px;
+  font-size: 14px; outline: none; transition: border-color .2s;
+}
+.players-search-input:focus { border-color: var(--accent); }
+.players-search-btn {
+  background: var(--accent); color: #07111f; border: none; border-radius: var(--radius);
+  padding: 10px 20px; font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: opacity .2s;
+}
+.players-search-btn:hover { opacity: .85; }
+.players-search-status {
+  margin-top: 10px; font-size: 13px; color: var(--muted); min-height: 20px;
+}
+.players-search-status.error { color: var(--red); }
+
+/* ── Player card ──────────────────────────────────────────────────────────── */
+.player-card {
+  max-width: 860px; margin: 0 auto 40px; padding: 0 20px;
+}
+.pc-main {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 24px; display: flex; align-items: center; gap: 20px;
+  flex-wrap: wrap; margin-bottom: 16px;
+}
+.pc-avatar { width: 64px; height: 64px; border-radius: 6px; image-rendering: pixelated; }
+.pc-info { flex: 1; min-width: 120px; }
+.pc-name { font-size: 20px; font-weight: 800; color: var(--text); }
+.pc-alliance { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.pc-last-fight { font-size: 11px; color: var(--dim); margin-top: 4px; }
+
+.pc-kda-block { text-align: right; }
+.pc-kda-k  { font-size: 28px; font-weight: 800; color: var(--green); }
+.pc-kda-d  { font-size: 28px; font-weight: 800; color: var(--red); }
+.pc-kda-a  { font-size: 28px; font-weight: 800; color: var(--accent); }
+.pc-kda-sep { font-size: 20px; color: var(--dim); margin: 0 2px; }
+.pc-kd-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+.pc-sections {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;
+}
+.pc-section {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px;
+}
+.pc-section--nemesis { border-color: var(--red); }
+.pc-section-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--dim); margin-bottom: 10px;
+}
+.pc-stat-row {
+  display: flex; justify-content: space-between; font-size: 13px;
+  padding: 5px 0; border-bottom: 1px solid var(--border-dim);
+}
+.pc-stat-row:last-child { border-bottom: none; }
+.pc-stat-label { color: var(--muted); }
+.pc-stat-val { font-weight: 600; color: var(--text); }
+
+.pc-nemesis-name {
+  display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: var(--red);
+}
+.pc-nemesis-head { width: 20px; height: 20px; image-rendering: pixelated; border-radius: 3px; }
+.pc-nemesis-deaths { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+.pc-best-kda { font-size: 22px; font-weight: 800; color: var(--accent); }
+.pc-best-kda-fight { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+.pc-source { font-size: 11px; color: var(--dim); margin-top: 10px; text-align: right; }
+.pc-source a { color: var(--accent); text-decoration: none; }
+
+/* ── Leaderboard ──────────────────────────────────────────────────────────── */
+.players-lb-wrap { max-width: 860px; margin: 0 auto 60px; padding: 0 20px; }
+.players-lb-header {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: 10px; margin-bottom: 12px;
+}
+.players-lb-title { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+.players-sort-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.ps-tab {
+  background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+  border-radius: var(--radius); padding: 5px 12px; font-size: 12px; cursor: pointer;
+  transition: all .2s;
+}
+.ps-tab:hover { border-color: var(--accent); color: var(--accent); }
+.ps-tab.active { background: var(--accent); border-color: var(--accent); color: #07111f; font-weight: 700; }
+
+.players-lb { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.players-lb-loading { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
+
+.plb-row {
+  display: grid; grid-template-columns: 36px 28px 1fr 120px 90px 52px;
+  align-items: center; gap: 10px; padding: 10px 16px;
+  border-bottom: 1px solid var(--border-dim); cursor: pointer; transition: background .15s;
+}
+.plb-row:last-child { border-bottom: none; }
+.plb-row:hover { background: var(--surface2); }
+
+.plb-rank { font-size: 12px; color: var(--dim); font-weight: 700; }
+.plb-head { width: 24px; height: 24px; border-radius: 3px; image-rendering: pixelated; }
+.plb-name { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plb-alliance { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plb-stat { text-align: right; }
+.plb-stat-val { font-size: 14px; font-weight: 700; color: var(--accent); display: block; }
+.plb-stat-label { font-size: 10px; color: var(--dim); }
+.plb-kd { font-size: 13px; font-weight: 600; color: var(--green); text-align: right; }
+
+/* progress bar */
+.players-progress-wrap { max-width: 860px; margin: 0 auto 20px; padding: 0 20px; }
+.players-progress-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.players-progress-bar-bg { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; height: 6px; overflow: hidden; }
+.players-progress-bar { height: 100%; background: var(--accent); border-radius: 4px; transition: width .5s; }

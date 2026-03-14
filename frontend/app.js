@@ -1274,18 +1274,63 @@ async function initBattleReel() {
     </div>`;
   }
 
+  const WORLD_NAMES = {north:'Kalros',south:'Garama',west:'Ascalon',lilboi:'Rivina',bigboi:'Balak'};
+
+  function fightReelItem(f) {
+    const cls = f.is_live ? 'won-unknown' : f.winner === 'attacker' ? 'won-attacker' : f.winner === 'defender' ? 'won-defender' : 'won-unknown';
+    const lbl = f.is_live ? 'LIVE' : f.winner === 'attacker' ? 'CAPTURED' : f.winner === 'defender' ? 'DEFENDED' : 'STANDOFF';
+    const worldName = WORLD_NAMES[f.world] || f.world || '';
+    const worldTag  = worldName ? `[${worldName.toUpperCase()}]` : '';
+    const attacker  = f.attacker_town || 'Attackers';
+    const defender  = f.defender_town || 'Defenders';
+    const area      = f.location ? `${f.location} ${f.territory_num}` : `T-${f.territory_num}`;
+    const detail    = f.is_live
+      ? `${attacker} vs ${defender} at ${area}`
+      : f.winner === 'attacker'
+      ? `${attacker} seized ${area} from ${defender}`
+      : f.winner === 'defender'
+      ? `${defender} held ${area}`
+      : `Standoff at ${area}`;
+    const ts = f.time_display ? `${f.date_display || ''} ${f.time_display}`.trim() : '';
+    return `<div class="reel-item ${cls}">
+      <span class="reel-dot"></span>
+      <div class="reel-body">
+        <span class="reel-label">${lbl}${worldTag ? ' ' + worldTag : ''}</span>
+        <span class="reel-detail">${detail}</span>
+        ${ts ? `<span class="reel-ts">${ts}</span>` : ''}
+      </div>
+    </div>`;
+  }
+
+  function fightSortTs(f) {
+    try { return new Date(`${f.date_display} ${f.time_display}`).getTime(); } catch { return 0; }
+  }
+
   async function load() {
     try {
-      const data = await fetch('/api/battles').then(r => r.json());
-      // Prefer real battle events; fall back to snapshot activity
+      const [data, fights] = await Promise.all([
+        fetch('/api/battles').then(r => r.json()),
+        fetch('/api/fights').then(r => r.json()).catch(() => []),
+      ]);
+
+      // Territory battle events (deduped)
       const battleEvents = [...(data.recent_battles||[]), ...(data.top_alliance_battles||[]), ...(data.rivina_battles||[])];
       const seen = new Set();
       const deduped = battleEvents.filter(b => { if(seen.has(b.id)) return false; seen.add(b.id); return true; });
-      const battles = deduped.length ? deduped : (data.recent_activity || []);
-      if (!battles.length) {
-        reel.innerHTML = `<div class="reel-item won-unknown"><span class="reel-dot"></span><div class="reel-body"><span class="reel-detail">Loading battle data...</span></div></div>`;
+
+      // Build combined list: territory battles + fight logs, sorted newest first
+      const terrItems = deduped.map(b => ({ ts: (b.detected_ts || b.last_battle_ts || 0) * 1000, html: reelItem(b) }));
+      const fightItems = (fights || []).filter(f => f.winner || f.is_live).map(f => ({ ts: fightSortTs(f), html: fightReelItem(f) }));
+      const combined = [...terrItems, ...fightItems].sort((a, b) => b.ts - a.ts);
+
+      if (combined.length) {
+        reel.innerHTML = combined.map(i => i.html).join('');
       } else {
-        reel.innerHTML = battles.map(reelItem).join('');
+        // Last resort: snapshot activity
+        const activity = data.recent_activity || [];
+        reel.innerHTML = activity.length
+          ? activity.map(reelItem).join('')
+          : `<div class="reel-item won-unknown"><span class="reel-dot"></span><div class="reel-body"><span class="reel-detail">Loading battle data...</span></div></div>`;
       }
       wrap.style.display = 'flex';
     } catch (_) {}
@@ -1504,6 +1549,7 @@ else if (document.getElementById('mapFrame'))      initMap();
 else if (document.getElementById('foundersGrid'))  initFounders();
 else if (document.getElementById('terrFeed'))      initTerritories();
 else if (document.getElementById('fightList'))     initFightsPage();
+else if (document.getElementById('playerLb'))      initPlayersPage();
 
 // ── fights page ──────────────────────────────────────────────────────────
 
@@ -1817,4 +1863,278 @@ function openFightPlayerModal(playerName, teamLabel) {
 
 function closeFightPlayerModal() {
   document.getElementById('fightPlayerModal').style.display = 'none';
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/*  PLAYERS PAGE                                                              */
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+let _lbSort = 'kills';
+
+function setLbSort(sort, btn) {
+  _lbSort = sort;
+  document.querySelectorAll('.ps-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadLeaderboard();
+}
+
+async function loadLeaderboard() {
+  const lb = document.getElementById('playerLb');
+  if (!lb) return;
+  try {
+    const rows = await fetch(`/api/eldritch/leaderboard?sort=${_lbSort}&limit=50`).then(r => r.json());
+    if (!rows.length) {
+      lb.innerHTML = '<div class="players-lb-loading">No data yet — search a player to add them.</div>';
+      return;
+    }
+    lb.innerHTML = rows.map((p, i) => {
+      const kd = p.deaths ? (p.kills / p.deaths).toFixed(2) : p.kills.toFixed(2);
+      const sortVal = p[_lbSort] ?? p.kills;
+      const sortLabel = {
+        kills:'Kills', assists:'Assists', conquest_wins:'Wins',
+        golems:'Golems', potions:'Potions',
+      }[_lbSort] || 'Kills';
+      return `<div class="plb-row" onclick="showPlayerCard('${p.uuid}')">
+        <span class="plb-rank">#${i + 1}</span>
+        <img class="plb-head" src="https://mc-heads.net/avatar/${p.name}/24" alt="">
+        <span class="plb-name">${p.name}</span>
+        <span class="plb-alliance">${p.alliance || ''}</span>
+        <span class="plb-stat"><span class="plb-stat-val">${sortVal?.toLocaleString?.() ?? sortVal}</span><span class="plb-stat-label">${sortLabel}</span></span>
+        <span class="plb-kd" title="K/D">${kd}</span>
+      </div>`;
+    }).join('');
+  } catch {
+    lb.innerHTML = '<div class="players-lb-loading">Failed to load leaderboard.</div>';
+  }
+}
+
+function _statRow(label, val) {
+  if (!val && val !== 0) return '';
+  return `<div class="pc-stat-row"><span class="pc-stat-label">${label}</span><span class="pc-stat-val">${Number(val).toLocaleString()}</span></div>`;
+}
+
+function renderPlayerCard(p) {
+  const card = document.getElementById('playerCard');
+  if (!card) return;
+  const kd = p.deaths ? (p.kills / p.deaths).toFixed(2) : '∞';
+  const ratio = p.conquest_wins + p.conquest_losses
+    ? ((p.conquest_wins / (p.conquest_wins + p.conquest_losses)) * 100).toFixed(0) + '%'
+    : '—';
+  card.innerHTML = `
+    <div class="pc-main">
+      <img class="pc-avatar" src="https://mc-heads.net/head/${p.name}/64" alt="${p.name}">
+      <div class="pc-info">
+        <div class="pc-name">${p.name}</div>
+        <div class="pc-alliance">${p.alliance || ''}</div>
+        ${p.last_fight ? `<div class="pc-last-fight">Last fight: ${p.last_fight}</div>` : ''}
+      </div>
+      <div class="pc-kda-block">
+        <span class="pc-kda-k" title="Kills">${p.kills.toLocaleString()}</span>
+        <span class="pc-kda-sep">/</span>
+        <span class="pc-kda-d" title="Deaths">${p.deaths.toLocaleString()}</span>
+        <span class="pc-kda-sep">/</span>
+        <span class="pc-kda-a" title="Assists">${p.assists.toLocaleString()}</span>
+        <div class="pc-kd-label">K / D / A &nbsp;·&nbsp; ${kd} K/D</div>
+      </div>
+    </div>
+    <div class="pc-sections">
+      <div class="pc-section">
+        <div class="pc-section-title">Combat</div>
+        ${_statRow('Kills', p.kills)}
+        ${_statRow('Deaths', p.deaths)}
+        ${_statRow('Assists', p.assists)}
+      </div>
+      <div class="pc-section">
+        <div class="pc-section-title">Conquest</div>
+        ${_statRow('Wins', p.conquest_wins)}
+        ${_statRow('Losses', p.conquest_losses)}
+        <div class="pc-stat-row"><span class="pc-stat-label">Win Rate</span><span class="pc-stat-val">${ratio}</span></div>
+        ${_statRow('Golems', p.golems)}
+        ${_statRow('Lamps', p.lamps)}
+        ${_statRow('First Bloods', p.first_bloods)}
+        ${_statRow('Close Calls', p.close_calls)}
+      </div>
+      <div class="pc-section">
+        <div class="pc-section-title">Consumables</div>
+        ${_statRow('Potions', p.potions)}
+        ${_statRow('Pearls', p.pearls)}
+        ${_statRow('Food', p.food)}
+        ${_statRow('Ancient Ingots', p.ancient_ingots)}
+      </div>
+      ${p.nemesis ? `<div class="pc-section pc-section--nemesis">
+        <div class="pc-section-title">Nemesis</div>
+        <div class="pc-nemesis-name"><img src="https://mc-heads.net/avatar/${p.nemesis}/20" class="pc-nemesis-head" alt=""> ${p.nemesis}</div>
+        ${p.nemesis_deaths ? `<div class="pc-nemesis-deaths">${p.nemesis_deaths} deaths to them</div>` : ''}
+      </div>` : ''}
+      ${p.best_kda_score ? `<div class="pc-section">
+        <div class="pc-section-title">Best KDA</div>
+        <div class="pc-best-kda">${p.best_kda_score}</div>
+        ${p.best_kda_fight ? `<div class="pc-best-kda-fight">${p.best_kda_fight}</div>` : ''}
+      </div>` : ''}
+    </div>
+    <div class="pc-source">Data from <a href="https://eldritchbot.com/player/${p.uuid}" target="_blank">EldritchBot</a></div>
+  `;
+  card.style.display = 'block';
+  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function showPlayerCard(uuid) {
+  const status = document.getElementById('playerSearchStatus');
+  const card   = document.getElementById('playerCard');
+  card.style.display = 'none';
+  if (status) { status.textContent = 'Loading…'; status.className = 'players-search-status'; }
+  try {
+    const p = await fetch(`/api/eldritch/player/${uuid}`).then(r => r.json());
+    if (p.error) throw new Error(p.error);
+    if (status) status.textContent = '';
+    renderPlayerCard(p);
+  } catch (e) {
+    if (status) { status.textContent = e.message || 'Not found'; status.className = 'players-search-status error'; }
+  }
+}
+
+async function searchPlayer() {
+  const input  = document.getElementById('playerSearchInput');
+  const status = document.getElementById('playerSearchStatus');
+  const card   = document.getElementById('playerCard');
+  const q = (input?.value || '').trim();
+  if (!q) return;
+
+  card.style.display = 'none';
+  if (status) { status.textContent = 'Searching…'; status.className = 'players-search-status'; }
+
+  // Check local leaderboard first
+  try {
+    const local = await fetch(`/api/eldritch/search?q=${encodeURIComponent(q)}`).then(r => r.json());
+    if (local.length === 1) {
+      if (status) status.textContent = '';
+      renderPlayerCard(local[0]);
+      return;
+    }
+    if (local.length > 1) {
+      // Show picker
+      if (status) status.textContent = '';
+      const lb = document.getElementById('playerLb');
+      if (lb) lb.innerHTML = local.map((p, i) => `
+        <div class="plb-row" onclick="showPlayerCard('${p.uuid}')">
+          <span class="plb-rank">#${i+1}</span>
+          <img class="plb-head" src="https://mc-heads.net/avatar/${p.name}/24" alt="">
+          <span class="plb-name">${p.name}</span>
+          <span class="plb-alliance">${p.alliance || ''}</span>
+        </div>`).join('');
+      return;
+    }
+  } catch { /* fall through to direct fetch */ }
+
+  // Not in DB — resolve via Mojang + fetch from EldritchBot
+  try {
+    const p = await fetch(`/api/eldritch/player/${encodeURIComponent(q)}`).then(r => r.json());
+    if (p.error) throw new Error(p.error);
+    if (status) status.textContent = '';
+    renderPlayerCard(p);
+    loadLeaderboard(); // refresh lb to include new entry
+  } catch (e) {
+    if (status) {
+      status.textContent = e.message?.includes('Mojang') ? 'Player not found' : (e.message || 'Failed to fetch stats');
+      status.className = 'players-search-status error';
+    }
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const input = document.getElementById('playerSearchInput');
+  if (!input) return;
+
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { hideSuggestions(); searchPlayer(); } });
+
+  // Autocomplete
+  const sugBox = document.getElementById('playerSuggestions');
+  let _sugDebounce = null;
+  let _sugActive = -1;
+  let _sugItems = [];
+
+  function hideSuggestions() {
+    sugBox.classList.remove('open');
+    _sugActive = -1;
+  }
+
+  function pickSuggestion(p) {
+    input.value = p.name;
+    hideSuggestions();
+    showPlayerCard(p.uuid);
+  }
+
+  function renderSuggestions(players) {
+    _sugItems = players;
+    _sugActive = -1;
+    if (!players.length) { hideSuggestions(); return; }
+    sugBox.innerHTML = players.map((p, i) => `
+      <div class="ps-suggestion" data-i="${i}">
+        <img src="https://mc-heads.net/avatar/${p.name}/24" width="24" height="24" alt="">
+        <span class="ps-suggestion-name">${p.name}</span>
+        ${p.alliance ? `<span class="ps-suggestion-alliance">${p.alliance}</span>` : ''}
+      </div>`).join('');
+    sugBox.querySelectorAll('.ps-suggestion').forEach((el, i) => {
+      el.addEventListener('mousedown', e => { e.preventDefault(); pickSuggestion(_sugItems[i]); });
+    });
+    sugBox.classList.add('open');
+  }
+
+  input.addEventListener('input', () => {
+    clearTimeout(_sugDebounce);
+    const q = input.value.trim();
+    if (!q) { hideSuggestions(); return; }
+    _sugDebounce = setTimeout(async () => {
+      try {
+        const results = await fetch(`/api/eldritch/search?q=${encodeURIComponent(q)}`).then(r => r.json());
+        if (input.value.trim() === q) renderSuggestions(results.slice(0, 8));
+      } catch { hideSuggestions(); }
+    }, 150);
+  });
+
+  input.addEventListener('keydown', e => {
+    if (!sugBox.classList.contains('open')) return;
+    const items = sugBox.querySelectorAll('.ps-suggestion');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      _sugActive = Math.min(_sugActive + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      _sugActive = Math.max(_sugActive - 1, -1);
+    } else if (e.key === 'Escape') {
+      hideSuggestions(); return;
+    } else { return; }
+    items.forEach((el, i) => el.classList.toggle('active', i === _sugActive));
+    if (_sugActive >= 0) input.value = _sugItems[_sugActive].name;
+  });
+
+  document.addEventListener('click', e => {
+    if (!sugBox.contains(e.target) && e.target !== input) hideSuggestions();
+  });
+});
+
+async function updateScrapeProgress() {
+  try {
+    const s = await fetch('/api/eldritch/status').then(r => r.json());
+    const wrap  = document.getElementById('progressWrap');
+    const label = document.getElementById('progressLabel');
+    const bar   = document.getElementById('progressBar');
+    if (!wrap) return;
+    const total = s.loka_players || 0;
+    const done  = (s.done || 0) + (s.not_found || 0);
+    if (!total || done >= total) { wrap.style.display = 'none'; return; }
+    const pct = Math.round((done / total) * 100);
+    const eta = s.eta_minutes > 60
+      ? `~${Math.round(s.eta_minutes / 60)}h remaining`
+      : `~${s.eta_minutes}m remaining`;
+    label.textContent = `Building player database: ${done.toLocaleString()} / ${total.toLocaleString()} (${pct}%) — ${eta}`;
+    bar.style.width = pct + '%';
+    wrap.style.display = 'block';
+  } catch { /* silent */ }
+}
+
+async function initPlayersPage() {
+  await loadLeaderboard();
+  await updateScrapeProgress();
+  setInterval(() => { updateScrapeProgress(); loadLeaderboard(); }, 30000);
 }

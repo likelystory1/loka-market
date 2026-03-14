@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Player Stats | StromgardeBot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/png" href="stromgardebot.png">
+</head>
+<body class="players-page">
+
+<nav class="navbar">
+  <div class="nav-brand" onclick="location.href='/'">
+    <img class="brand-icon" src="stromgardebot.png" alt="StromgardeBot">
+    <span class="brand-text">STROMGARDEBOT</span>
+  </div>
+  <div class="nav-links">
+    <a href="/market.html" class="nav-link">Market</a>
+    <a href="/alliances.html" class="nav-link">Alliances</a>
+    <a href="/towns.html" class="nav-link">Towns</a>
+    <a href="/fights" class="nav-link">Fights</a>
+    <a href="/founders" class="nav-link">Founders</a>
+    <a href="/players" class="nav-link active">Players</a>
+  </div>
+</nav>
+
+<div class="players-header">
+  <h1 class="players-title">Player Stats</h1>
+  <p class="players-sub">Combat data from <a href="https://eldritchbot.com" target="_blank">EldritchBot</a></p>
+
+  <div class="players-search-wrap">
+    <div class="players-search-inner">
+      <input id="playerSearchInput" class="players-search-input" type="text"
+             placeholder="Search player name…" autocomplete="off" spellcheck="false">
+      <div id="playerSuggestions" class="players-suggestions"></div>
+    </div>
+    <button class="players-search-btn" onclick="searchPlayer()">Search</button>
+  </div>
+  <div id="playerSearchStatus" class="players-search-status"></div>
+</div>
+
+<!-- Player card (shown after search) -->
+<div id="playerCard" class="player-card" style="display:none"></div>
+
+<!-- Scrape progress bar -->
+<div class="players-progress-wrap" id="progressWrap" style="display:none">
+  <div class="players-progress-label" id="progressLabel"></div>
+  <div class="players-progress-bar-bg">
+    <div class="players-progress-bar" id="progressBar"></div>
+  </div>
+</div>
+
+<!-- Leaderboard -->
+<div class="players-lb-wrap">
+  <div class="players-lb-header">
+    <span class="players-lb-title">Leaderboard</span>
+    <div class="players-sort-tabs">
+      <button class="ps-tab active" onclick="setLbSort('kills',this)">Kills</button>
+      <button class="ps-tab" onclick="setLbSort('assists',this)">Assists</button>
+      <button class="ps-tab" onclick="setLbSort('conquest_wins',this)">Wins</button>
+      <button class="ps-tab" onclick="setLbSort('golems',this)">Golems</button>
+      <button class="ps-tab" onclick="setLbSort('potions',this)">Potions</button>
+    </div>
+  </div>
+  <div id="playerLb" class="players-lb">
+    <div class="players-lb-loading">Loading…</div>
+  </div>
+</div>
+
+<footer class="footer">
+  StromgardeBot &nbsp;•&nbsp; Stats from <a href="https://eldritchbot.com" target="_blank">EldritchBot</a>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
