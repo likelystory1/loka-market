@@ -361,7 +361,68 @@ def founders_page():
 def territories_page():
     return send_from_directory(FRONTEND, "territories.html")
 
-PARSED_DIR = os.path.join(BASE_DIR, 'fightlogs', 'parsed')
+FIGHTLOGS_DIR = os.path.join(BASE_DIR, 'fightlogs')
+PARSED_DIR    = os.path.join(FIGHTLOGS_DIR, 'parsed')
+
+os.makedirs(PARSED_DIR, exist_ok=True)
+
+# ── active fight log poller ───────────────────────────────────────────────────
+def _poll_active_fights() -> int:
+    """Download + parse any active conquest fight logs. Returns count of active fights."""
+    try:
+        req  = urllib.request.Request(
+            'https://api.lokamc.com/territories/search/findBattles?size=100',
+            headers={'User-Agent': 'LokaUtils/1.0'})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+        territories = data.get('_embedded', {}).get('territories', [])
+    except Exception as e:
+        print(f'[fights-poll] fetch failed: {e}')
+        return 0
+
+    active = 0
+    for t in territories:
+        bz = t.get('battleZone') or t.get('tg', {}).get('battleZone')
+        if not bz:
+            continue
+        log_name = bz.get('log', '')
+        if not log_name:
+            continue
+
+        txt_path    = os.path.join(FIGHTLOGS_DIR, log_name + '.txt')
+        parsed_path = os.path.join(PARSED_DIR, log_name + '.json')
+
+        active += 1
+        try:
+            url = f'https://api.lokamc.com/conquestlogs/{log_name}.txt'
+            req = urllib.request.Request(url, headers={'User-Agent': 'LokaUtils/1.0'})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                content = resp.read()
+            with open(txt_path, 'wb') as f:
+                f.write(content)
+        except Exception as e:
+            print(f'[fights-poll] download {log_name}: {e}')
+            continue
+
+        try:
+            from fights_parser import parse_fight_log
+            result = parse_fight_log(txt_path)
+            tmp = parsed_path + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(result, f, separators=(',', ':'))
+            os.replace(tmp, parsed_path)
+            total = len(result.get('attackers', [])) + len(result.get('defenders', []))
+            print(f'[fights-poll] parsed {log_name} ({total} players)')
+        except Exception as e:
+            print(f'[fights-poll] parse {log_name}: {e}')
+
+    return active
+
+def _fight_poll_loop():
+    while True:
+        active = _poll_active_fights()
+        # Poll fast while a fight is live so we capture the full log
+        time.sleep(10 if active else 60)
 
 @app.route("/api/fights")
 def api_fights():
@@ -374,19 +435,24 @@ def api_fights():
         try:
             with open(path, encoding='utf-8') as f:
                 d = json.load(f)
+            total = len(d.get('attackers', [])) + len(d.get('defenders', []))
             results.append({
                 'filename':       path.stem + '.txt',
                 'json_file':      path.name,
-                'display_name':   path.stem.replace('_', ' '),
                 'location':       d.get('location', ''),
                 'winner':         d.get('winner', ''),
                 'duration':       d.get('duration', ''),
                 'attacker_town':  d.get('attacker_town', ''),
                 'defender_town':  d.get('defender_town', ''),
+                'world':          d.get('world', ''),
+                'territory_num':  d.get('territory_num', ''),
+                'date_display':   d.get('date_display', ''),
+                'time_display':   d.get('time_display', ''),
                 'attacker_count': len(d.get('attackers', [])),
                 'defender_count': len(d.get('defenders', [])),
                 'attacker_kills': d.get('attacker_kills', 0),
                 'defender_kills': d.get('defender_kills', 0),
+                'total_players':  total,
             })
         except Exception as e:
             print(f'[fights] error reading {path.name}: {e}')
@@ -852,6 +918,7 @@ ensure_indexes()
 ensure_battle_tables()
 threading.Thread(target=_warmup,          daemon=True).start()
 threading.Thread(target=_loka_cache_loop, daemon=True).start()
+threading.Thread(target=_fight_poll_loop, daemon=True).start()
 
 if __name__ == "__main__":
     # For local dev only — production uses gunicorn (see gunicorn.conf.py)
