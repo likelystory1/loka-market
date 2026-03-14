@@ -12,6 +12,7 @@ from flask import Flask, jsonify, send_from_directory, request, abort
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from fights_parser import parse_fight_log, list_fights
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
@@ -348,9 +349,9 @@ def towns_page():
 def market_page_route():
     return send_from_directory(FRONTEND, "market.html")
 
-@app.route("/map")
-def map_page():
-    return send_from_directory(FRONTEND, "map.html")
+@app.route("/fights")
+def fights_page():
+    return send_from_directory(FRONTEND, "fights.html")
 
 @app.route("/founders")
 def founders_page():
@@ -359,6 +360,19 @@ def founders_page():
 @app.route("/territories")
 def territories_page():
     return send_from_directory(FRONTEND, "territories.html")
+
+@app.route("/api/fights")
+def api_fights():
+    return jsonify(list_fights())
+
+@app.route("/api/fights/<path:filename>")
+def api_fight_detail(filename):
+    if '/' in filename or '..' in filename:
+        abort(400)
+    fp = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fightlogs', filename)
+    if not os.path.exists(fp):
+        abort(404)
+    return jsonify(parse_fight_log(fp))
 
 @app.route("/<path:filename>")
 def static_files(filename):
