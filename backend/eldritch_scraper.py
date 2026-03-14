@@ -462,8 +462,10 @@ def get_leaderboard(sort='kills', limit=50) -> list:
     if sort == 'charges':
         rows = db.execute(
             '''SELECT *,
-               CAST(lamps AS REAL) / CASE WHEN golems = 0 THEN 1 ELSE golems END AS charge_rate
-               FROM player_stats WHERE error IS NULL AND name != "" AND golems >= 1
+               CAST(lamps AS REAL) / golems AS charge_rate
+               FROM player_stats
+               WHERE error IS NULL AND name != "" AND golems >= 1 AND lamps >= 50
+                 AND CAST(lamps AS REAL) / golems <= 1.0
                ORDER BY charge_rate DESC LIMIT ?''',
             (limit,)
         ).fetchall()
