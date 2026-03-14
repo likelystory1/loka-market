@@ -1338,14 +1338,14 @@ async function initFounders() {
       const imgEl = headUrl
         ? `<div class="founder-avatar-wrap ${isGeneral ? 'founder-general' : ''} ${isTraitor ? 'founder-traitor-wrap' : ''}">
              <img class="founder-avatar" src="${headUrl}" alt="${f.name || ''}" onerror="this.parentElement.style.display='none'">
-             ${isTraitor ? `<div class="founder-rank-badge founder-rank-badge--traitor">✦ TRAITOR</div>` : isGeneral ? `<div class="founder-rank-badge">⚔ GENERAL</div>` : ''}
+             ${isTraitor ? `<div class="founder-rank-badge founder-rank-badge--traitor">✕ EXCOMMUNICATED</div>` : isGeneral ? `<div class="founder-rank-badge">⚔ GENERAL</div>` : ''}
            </div>`
         : '';
       return `
         <div class="founder-card ${isGeneral ? 'founder-card--general' : ''} ${isTraitor ? 'founder-card--traitor' : ''}">
           ${imgEl}
           <div class="founder-info">
-            <div class="founder-name ${isTraitor ? 'founder-name--traitor' : ''}">${f.name || 'Unknown'}</div>
+            <div class="founder-name ${isTraitor ? 'founder-name--traitor' : ''}">${isTraitor ? '<span class="traitor-x">✕</span> ' : ''}${f.name || 'Unknown'}</div>
             ${f.title ? `<div class="founder-title">${f.title}</div>` : ''}
             ${f.note  ? `<div class="founder-note">${f.note}</div>`  : ''}
           </div>

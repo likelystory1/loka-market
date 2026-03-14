@@ -1503,6 +1503,7 @@ img { display: block; }
   color: #f87171; background: rgba(248,113,113,.12); border-color: rgba(248,113,113,.3);
 }
 .founder-name--traitor { color: #f87171; }
+.traitor-x { color: #f87171; font-weight: 900; margin-right: 2px; }
 
 /* ── Stromgarde History Section ───────────────────────────────────────────── */
 .stromgarde-history {
