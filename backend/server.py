@@ -2,6 +2,7 @@ import os
 import re
 import time
 import json
+from pathlib import Path
 import statistics
 import sqlite3
 import threading
@@ -12,7 +13,6 @@ from flask import Flask, jsonify, send_from_directory, request, abort
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from fights_parser import parse_fight_log, list_fights
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
@@ -361,18 +361,48 @@ def founders_page():
 def territories_page():
     return send_from_directory(FRONTEND, "territories.html")
 
+PARSED_DIR = os.path.join(BASE_DIR, 'fightlogs', 'parsed')
+
 @app.route("/api/fights")
 def api_fights():
-    return jsonify(list_fights())
+    """List all pre-parsed fight JSON files."""
+    results = []
+    if not os.path.isdir(PARSED_DIR):
+        return jsonify(results)
+    for path in sorted(Path(PARSED_DIR).glob('*.json'),
+                       key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            with open(path, encoding='utf-8') as f:
+                d = json.load(f)
+            results.append({
+                'filename':       path.stem + '.txt',
+                'json_file':      path.name,
+                'display_name':   path.stem.replace('_', ' '),
+                'location':       d.get('location', ''),
+                'winner':         d.get('winner', ''),
+                'duration':       d.get('duration', ''),
+                'attacker_town':  d.get('attacker_town', ''),
+                'defender_town':  d.get('defender_town', ''),
+                'attacker_count': len(d.get('attackers', [])),
+                'defender_count': len(d.get('defenders', [])),
+                'attacker_kills': d.get('attacker_kills', 0),
+                'defender_kills': d.get('defender_kills', 0),
+            })
+        except Exception as e:
+            print(f'[fights] error reading {path.name}: {e}')
+    return jsonify(results)
 
 @app.route("/api/fights/<path:filename>")
 def api_fight_detail(filename):
+    """Serve a pre-parsed fight JSON by original .txt filename or .json stem."""
     if '/' in filename or '..' in filename:
         abort(400)
-    fp = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fightlogs', filename)
-    if not os.path.exists(fp):
+    stem = filename.removesuffix('.txt').removesuffix('.json')
+    jp = os.path.join(PARSED_DIR, stem + '.json')
+    if not os.path.exists(jp):
         abort(404)
-    return jsonify(parse_fight_log(fp))
+    with open(jp, encoding='utf-8') as f:
+        return app.response_class(f.read(), content_type='application/json')
 
 @app.route("/<path:filename>")
 def static_files(filename):
