@@ -361,6 +361,10 @@ def founders_page():
 def territories_page():
     return send_from_directory(FRONTEND, "territories.html")
 
+@app.route("/players")
+def players_page():
+    return send_from_directory(FRONTEND, "players.html")
+
 FIGHTLOGS_DIR = os.path.join(BASE_DIR, 'fightlogs')
 PARSED_DIR    = os.path.join(FIGHTLOGS_DIR, 'parsed')
 
@@ -419,6 +423,12 @@ def _poll_active_fights() -> int:
             os.replace(tmp, parsed_path)
             total = len(result.get('attackers', [])) + len(result.get('defenders', []))
             print(f'[fights-poll] parsed {log_name} ({total} players)')
+            # Queue fight participants for priority EB re-scrape
+            try:
+                names = [p['name'] for p in result.get('attackers', []) + result.get('defenders', [])]
+                queue_by_names(names, priority=1)
+            except Exception:
+                pass
         except Exception as e:
             print(f'[fights-poll] parse {log_name}: {e}')
 
@@ -836,6 +846,89 @@ def api_founders():
     except Exception:
         return jsonify([])
 
+# ── api: eldritch bot player stats ────────────────────────────────────────────
+from eldritch_scraper import (
+    fetch_player, save_player, get_player, get_leaderboard,
+    search_players, name_to_uuid, fmt_uuid, queue_players, queue_by_names,
+    get_queue_stats, load_loka_players, queue_all_loka_players, start_worker,
+)
+
+ELDRITCH_STALE = 86400  # 24 hours — re-scrape if older
+
+@app.route("/api/eldritch/leaderboard")
+def api_eldritch_leaderboard():
+    sort  = request.args.get('sort', 'kills')
+    limit = min(int(request.args.get('limit', 50)), 200)
+    return jsonify(get_leaderboard(sort, limit))
+
+@app.route("/api/eldritch/search")
+def api_eldritch_search():
+    q = request.args.get('q', '').strip()
+    if not q or len(q) > 32:
+        return jsonify([])
+    import sqlite3 as _sq
+    from eldritch_scraper import LOKA_PATH
+    db = _sq.connect(LOKA_PATH)
+    db.row_factory = _sq.Row
+    rows = db.execute(
+        'SELECT uuid, name FROM loka_players WHERE name LIKE ? ORDER BY name COLLATE NOCASE LIMIT 12',
+        (f'{q}%',)
+    ).fetchall()
+    db.close()
+    return jsonify([{'uuid': r['uuid'], 'name': r['name']} for r in rows if r['name']])
+
+@app.route("/api/eldritch/status")
+def api_eldritch_status():
+    return jsonify(get_queue_stats())
+
+@app.route("/api/eldritch/player/<path:identifier>")
+def api_eldritch_player(identifier):
+    """Accepts a UUID (with/without dashes) or a player name."""
+    raw = identifier.strip()
+    is_uuid = bool(re.match(r'^[0-9a-f\-]{32,36}$', raw, re.I))
+    if is_uuid:
+        uuid = fmt_uuid(raw)
+    else:
+        uuid = name_to_uuid(raw)
+        if not uuid:
+            return jsonify({'error': 'Player not found'}), 404
+
+    # Always fetch live from EldritchBot
+    try:
+        data = fetch_player(uuid)
+        if data.get('error') == 'not_found':
+            return jsonify({'error': 'Player has no EldritchBot record'}), 404
+        return jsonify(data)
+    except Exception as e:
+        # Fall back to cache if live fetch fails
+        cached = get_player(uuid)
+        if cached:
+            return jsonify(cached)
+        return jsonify({'error': str(e)}), 502
+
+def _eldritch_init():
+    """
+    Startup: only queue players already in player_stats for a daily refresh.
+    Full bulk scraping is done manually via run_scraper.py.
+    """
+    time.sleep(5)
+    import sqlite3 as _sq
+    from eldritch_scraper import DB_PATH as _EB_PATH, _REFRESH_DAYS
+    db  = _sq.connect(_EB_PATH)
+    now = int(time.time())
+    cutoff = now - _REFRESH_DAYS * 86400
+    db.execute('''
+        INSERT OR IGNORE INTO scrape_queue (uuid, priority, queued_ts, status)
+        SELECT uuid, 9, ?, 'pending'
+        FROM player_stats
+        WHERE error IS NULL AND name != '' AND scraped_ts < ?
+    ''', (now, cutoff))
+    stale = db.execute('SELECT changes()').fetchone()[0]
+    db.commit()
+    db.close()
+    if stale:
+        print(f'[eldritch] re-queued {stale} stale player records for daily refresh')
+
 # ── loka data cache (file-backed, refreshed every 5 min) ─────────────────────
 LOKA_CACHE_DIR       = os.path.join(BASE_DIR, "cache")
 LOKA_CACHE_ALLIANCES = os.path.join(LOKA_CACHE_DIR, "alliances.json")
@@ -931,7 +1024,9 @@ ensure_indexes()
 ensure_battle_tables()
 threading.Thread(target=_warmup,          daemon=True).start()
 threading.Thread(target=_loka_cache_loop, daemon=True).start()
-threading.Thread(target=_fight_poll_loop, daemon=True).start()
+threading.Thread(target=_fight_poll_loop,  daemon=True).start()
+threading.Thread(target=_eldritch_init,    daemon=True).start()
+# Bulk scraper runs as a separate process: python run_scraper.py --threads 8
 
 def _get_alliances_for_poller():
     """Return alliances list from the loka cache file."""
