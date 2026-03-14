@@ -1307,9 +1307,10 @@ async function initBattleReel() {
   }
 
   async function load() {
+    wrap.style.display = 'flex'; // always show; content updates in place
     try {
       const [data, fights] = await Promise.all([
-        fetch('/api/battles').then(r => r.json()),
+        fetch('/api/battles').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
         fetch('/api/fights').then(r => r.json()).catch(() => []),
       ]);
 
@@ -1330,10 +1331,14 @@ async function initBattleReel() {
         const activity = data.recent_activity || [];
         reel.innerHTML = activity.length
           ? activity.map(reelItem).join('')
-          : `<div class="reel-item won-unknown"><span class="reel-dot"></span><div class="reel-body"><span class="reel-detail">Loading battle data...</span></div></div>`;
+          : `<div class="reel-item won-unknown"><span class="reel-dot"></span><div class="reel-body"><span class="reel-detail">No recent battle data</span></div></div>`;
       }
-      wrap.style.display = 'flex';
-    } catch (_) {}
+    } catch (_) {
+      // Keep existing content on failure; only show placeholder if reel is empty
+      if (!reel.innerHTML) {
+        reel.innerHTML = `<div class="reel-item won-unknown"><span class="reel-dot"></span><div class="reel-body"><span class="reel-detail">Battle feed loading…</span></div></div>`;
+      }
+    }
   }
 
   await load();
