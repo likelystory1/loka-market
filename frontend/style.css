@@ -1064,7 +1064,9 @@ img { display: block; }
 /*  NEW ALLIANCE CARD DESIGN                                                   */
 /* ══════════════════════════════════════════════════════════════════════════ */
 
-.alliance-grid { display: flex; flex-direction: column; gap: 10px; }
+.alliance-grid { display: flex; flex-direction: column; gap: 0; }
+.continent-rankings-group { margin-bottom: 24px; }
+.continent-rankings-header { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 8px 4px 10px; border-bottom: 1px solid var(--border-dim); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
 
 .alliance-card {
   background: var(--surface); border: 1px solid var(--border-dim);
@@ -1390,6 +1392,7 @@ img { display: block; }
 .map-page-content {
   flex: 1; display: flex; flex-direction: column;
   padding: 24px; gap: 16px; max-width: 1400px; width: 100%; margin: 0 auto;
+  min-height: 0;
 }
 .map-continent-pills {
   display: flex; gap: 10px; flex-wrap: wrap;
@@ -1404,8 +1407,7 @@ img { display: block; }
 .map-pill.active { color: var(--frost); border-color: var(--frost); background: rgba(186,230,253,.08); }
 .map-iframe-wrap {
   flex: 1;
-  height: calc(100vh - 160px);
-  min-height: 680px;
+  min-height: 500px;
   border: 1px solid var(--border-dim); border-radius: var(--radius-lg);
   overflow: hidden; background: var(--surface);
 }
