@@ -859,6 +859,25 @@ def api_battles():
                 })
 
         db.close()
+
+        # Resolve town IDs → names for all battle event lists
+        town_lookup = _build_town_lookup()
+        def _resolve_battle(b):
+            if not b.get('old_town_name') and b.get('old_town_id'):
+                info = town_lookup.get(b['old_town_id'], {})
+                b['old_town_name']     = info.get('town_name', '')
+                b['old_alliance_name'] = info.get('alliance_name', '')
+            if not b.get('new_town_name') and b.get('new_town_id'):
+                info = town_lookup.get(b['new_town_id'], {})
+                b['new_town_name']     = info.get('town_name', '')
+                b['new_alliance_name'] = info.get('alliance_name', '')
+            return b
+
+        recent          = [_resolve_battle(b) for b in recent]
+        top_alliance    = [_resolve_battle(b) for b in top_alliance]
+        rivina          = [_resolve_battle(b) for b in rivina]
+        no_transfer     = [_resolve_battle(b) for b in no_transfer]
+
         return jsonify({
             'recent_battles':      recent,
             'top_alliance_battles': top_alliance,
