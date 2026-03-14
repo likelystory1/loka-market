@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fight Logs — StromgardeBot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/png" href="stromgardebot.png">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-brand" onclick="location.href='/'">
+    <img class="brand-icon" src="stromgardebot.png" alt="StromgardeBot">
+    <span class="brand-text">STROMGARDEBOT</span>
+  </div>
+  <div class="nav-links">
+    <a href="/market.html" class="nav-link">Market</a>
+    <a href="/alliances.html" class="nav-link">Alliances</a>
+    <a href="/towns.html" class="nav-link">Towns</a>
+    <a href="/fights" class="nav-link active">Fights</a>
+    <a href="/founders" class="nav-link">Founders</a>
+    <a href="/territories" class="nav-link">War Room</a>
+  </div>
+</nav>
+
+<div class="page-header page-header--fights">
+  <div class="page-header-inner">
+    <h1 class="page-title"><span class="page-title-icon">⚔️</span> Fight Logs</h1>
+    <p class="page-subtitle">Parsed fight logs with team stats and player breakdowns</p>
+  </div>
+</div>
+
+<div class="main-content" id="fightsMain">
+  <div id="fightList">
+    <div class="loading-state"><div class="spinner spinner--purple"></div><span>Loading fights…</span></div>
+  </div>
+  <div id="fightDetail" style="display:none"></div>
+</div>
+
+<!-- Player detail modal -->
+<div id="fightPlayerModal" class="modal" style="display:none">
+  <div class="modal-backdrop" onclick="closeFightPlayerModal()"></div>
+  <div class="modal-box modal-box--wide">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="fightModalName">—</div>
+        <div class="modal-subtitle" id="fightModalSubtitle">—</div>
+      </div>
+      <button class="modal-close" onclick="closeFightPlayerModal()">✕</button>
+    </div>
+    <div class="modal-body" id="fightModalBody"></div>
+  </div>
+</div>
+
+<footer class="footer">
+  StromgardeBot &nbsp;•&nbsp; Data from <a href="https://lokamc.com" target="_blank">LokaMinecraft</a>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>

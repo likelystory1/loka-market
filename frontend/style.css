@@ -1527,3 +1527,132 @@ img { display: block; }
   line-height: 1.8;
   margin-top: 16px !important;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/*  FIGHTS PAGE                                                                */
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+.page-header--fights { background: linear-gradient(135deg, #1a0a2e 0%, #0f172a 100%); border-bottom: 1px solid var(--border); }
+
+/* Fight list grid */
+.fights-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+
+.fight-card {
+  background: var(--surface); border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg); padding: 20px;
+  cursor: pointer; transition: all .18s;
+}
+.fight-card:hover { border-color: var(--purple); transform: translateY(-2px); box-shadow: 0 4px 20px rgba(99,102,241,.15); }
+
+.fight-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.fight-card-name { font-size: 14px; font-weight: 700; color: var(--text); }
+.fight-winner-badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+.fight-winner--att { background: rgba(99,102,241,.18); color: #818cf8; border: 1px solid rgba(99,102,241,.3); }
+.fight-winner--def { background: rgba(245,158,11,.15); color: #f59e0b; border: 1px solid rgba(245,158,11,.3); }
+
+.fight-card-meta { display: flex; gap: 12px; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.fight-meta-item { display: flex; align-items: center; gap: 4px; }
+
+.fight-card-teams { display: flex; gap: 8px; flex-wrap: wrap; }
+.fight-team-pill { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
+.fight-team-pill--att { background: rgba(99,102,241,.12); color: #818cf8; }
+.fight-team-pill--def { background: rgba(245,158,11,.1); color: #f59e0b; }
+
+/* Fight detail */
+.fight-detail-header {
+  margin-bottom: 24px;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+.fight-detail-title { font-size: 20px; font-weight: 800; color: var(--text); }
+.fight-detail-meta { font-size: 13px; color: var(--muted); }
+.fight-winner-inline { font-weight: 700; }
+.fight-mutator { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.07); color: var(--muted); }
+
+.fight-teams-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 900px) { .fight-teams-grid { grid-template-columns: 1fr; } }
+
+.fight-team-panel {
+  background: var(--surface); border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg); overflow: hidden;
+}
+.fight-team-header {
+  font-size: 13px; font-weight: 700; padding: 14px 18px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border-dim);
+}
+.fight-team-header--att { color: #818cf8; background: rgba(99,102,241,.08); }
+.fight-team-header--def { color: #f59e0b; background: rgba(245,158,11,.08); }
+.fight-team-count { font-size: 11px; font-weight: 500; color: var(--muted); }
+
+/* Team totals bar */
+.fight-team-totals {
+  display: flex; flex-wrap: wrap; gap: 0;
+  border-bottom: 1px solid var(--border-dim);
+}
+.fight-team-totals--att { background: rgba(99,102,241,.05); }
+.fight-team-totals--def { background: rgba(245,158,11,.04); }
+.ftt-item {
+  flex: 1; min-width: 64px; display: flex; flex-direction: column;
+  align-items: center; padding: 10px 8px;
+  border-right: 1px solid var(--border-dim);
+}
+.ftt-item:last-child { border-right: none; }
+.ftt-val   { font-size: 15px; font-weight: 800; color: var(--text); }
+.ftt-label { font-size: 10px; color: var(--dim); margin-top: 2px; text-transform: uppercase; letter-spacing: .05em; }
+
+.fight-leaderboard-header {
+  display: grid; grid-template-columns: 48px 1fr 80px 60px;
+  padding: 8px 16px; font-size: 10px; font-weight: 600;
+  color: var(--dim); text-transform: uppercase; letter-spacing: .08em;
+  border-bottom: 1px solid var(--border-dim);
+}
+
+.fight-player-row {
+  display: grid; grid-template-columns: 48px 1fr 80px 60px;
+  padding: 10px 16px; align-items: center;
+  border-bottom: 1px solid var(--border-dim);
+  cursor: pointer; transition: background .15s;
+}
+.fight-player-row:last-child { border-bottom: none; }
+.fight-player-row:hover { background: rgba(255,255,255,.04); }
+.att-row:hover { background: rgba(99,102,241,.06); }
+.def-row:hover { background: rgba(245,158,11,.05); }
+
+.fight-player-rank { font-size: 11px; font-weight: 700; color: var(--muted); }
+.fight-player-rank.rank-1 { color: #f59e0b; }
+.fight-player-rank.rank-2 { color: #94a3b8; }
+.fight-player-rank.rank-3 { color: #cd7c3a; }
+
+.fight-player-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.fight-player-town { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+.fight-player-kda { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 2px; }
+.kda-k { color: #10b981; }
+.kda-d { color: #ef4444; }
+.kda-a { color: #818cf8; }
+.kda-sep { color: var(--dim); font-weight: 400; }
+
+.fight-player-dmg { font-size: 12px; color: var(--muted); text-align: right; }
+
+/* Player detail modal */
+.modal-box--wide { max-width: 520px; }
+
+.fight-modal-kda {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 12px; margin-bottom: 16px;
+}
+.fight-modal-stat { text-align: center; padding: 12px; background: var(--bg); border-radius: var(--radius); }
+.fight-modal-stat-val { font-size: 22px; font-weight: 800; }
+.fight-modal-stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+.fight-modal-dmg-row {
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-size: 12px;
+  color: var(--muted); padding: 8px 0 16px; border-bottom: 1px solid var(--border-dim);
+  margin-bottom: 16px;
+}
+
+.detail-section { margin-bottom: 20px; }
+.detail-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin-bottom: 8px; }
+.detail-stat-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border-dim); font-size: 13px; }
+.detail-stat-row:last-child { border-bottom: none; }
+.detail-stat-val { font-weight: 600; color: var(--text); }

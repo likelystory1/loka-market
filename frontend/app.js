@@ -1484,3 +1484,238 @@ else if (document.getElementById('townContent'))   initTowns();
 else if (document.getElementById('mapFrame'))      initMap();
 else if (document.getElementById('foundersGrid'))  initFounders();
 else if (document.getElementById('terrFeed'))      initTerritories();
+else if (document.getElementById('fightList'))     initFightsPage();
+
+// ── fights page ──────────────────────────────────────────────────────────
+
+let currentFightData = null;
+
+async function initFightsPage() {
+  if (!document.getElementById('fightList')) return;
+  try {
+    const fights = await fetch('/api/fights').then(r => r.json());
+    renderFightList(fights);
+  } catch (e) {
+    document.getElementById('fightList').innerHTML = '<div class="empty-state">Failed to load fights.</div>';
+  }
+}
+
+function renderFightList(fights) {
+  const el = document.getElementById('fightList');
+  if (!fights.length) {
+    el.innerHTML = '<div class="empty-state">No fight logs found.</div>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="fights-grid">
+      ${fights.map(f => {
+        const winnerLabel = f.winner === 'attackers' ? 'Attackers Win' : f.winner === 'defenders' ? 'Defenders Win' : f.winner;
+        const winnerClass = f.winner === 'attackers' ? 'fight-winner--att' : 'fight-winner--def';
+        return `
+          <div class="fight-card" onclick="openFight('${f.filename}')">
+            <div class="fight-card-header">
+              <div class="fight-card-name">${f.display_name}</div>
+              <div class="fight-winner-badge ${winnerClass}">${winnerLabel}</div>
+            </div>
+            <div class="fight-card-meta">
+              <span class="fight-meta-item">📍 ${f.location}</span>
+              <span class="fight-meta-item">⏱ ${f.duration}</span>
+            </div>
+            <div class="fight-card-teams">
+              <div class="fight-team-pill fight-team-pill--att">
+                ⚔ ${f.attacker_count} attackers · ${f.attacker_kills}K
+              </div>
+              <div class="fight-team-pill fight-team-pill--def">
+                🛡 ${f.defender_count} defenders · ${f.defender_kills}K
+              </div>
+            </div>
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+async function openFight(filename) {
+  document.getElementById('fightList').style.display = 'none';
+  const detail = document.getElementById('fightDetail');
+  detail.style.display = '';
+  detail.innerHTML = '<div class="loading-state"><div class="spinner spinner--purple"></div><span>Parsing fight…</span></div>';
+  try {
+    const fight = await fetch(`/api/fights/${encodeURIComponent(filename)}`).then(r => r.json());
+    currentFightData = fight;
+    renderFightDetail(fight, filename);
+  } catch (e) {
+    detail.innerHTML = '<div class="empty-state">Failed to load fight data.</div>';
+  }
+}
+
+function backToFightList() {
+  document.getElementById('fightDetail').style.display = 'none';
+  document.getElementById('fightList').style.display = '';
+  currentFightData = null;
+}
+
+function renderFightDetail(fight, filename) {
+  const winnerLabel = fight.winner === 'attackers' ? 'Attackers' : fight.winner === 'defenders' ? 'Defenders' : fight.winner;
+  const el = document.getElementById('fightDetail');
+
+  const renderLeaderboard = (players, teamClass, teamLabel) => {
+    if (!players.length) return `<div class="empty-state">No players.</div>`;
+    return players.map((p, i) => {
+      const rank   = i + 1;
+      const rClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : '';
+      const rLabel = rank === 1 ? '1ST' : rank === 2 ? '2ND' : rank === 3 ? '3RD' : `#${rank}`;
+      return `
+        <div class="fight-player-row ${teamClass}-row" onclick="openFightPlayerModal('${p.name}', '${teamLabel}')">
+          <div class="fight-player-rank ${rClass}">${rLabel}</div>
+          <div class="fight-player-info">
+            <div class="fight-player-name">${p.name}</div>
+            <div class="fight-player-town">${p.town}</div>
+          </div>
+          <div class="fight-player-kda">
+            <span class="kda-k">${p.kills}</span>
+            <span class="kda-sep">/</span>
+            <span class="kda-d">${p.deaths}</span>
+            <span class="kda-sep">/</span>
+            <span class="kda-a">${p.assists}</span>
+          </div>
+          <div class="fight-player-dmg">${p.damage_dealt.toLocaleString(undefined, {maximumFractionDigits:0})}</div>
+        </div>`;
+    }).join('');
+  };
+
+  const renderTeamTotals = (totals, cls) => `
+    <div class="fight-team-totals fight-team-totals--${cls}">
+      <div class="ftt-item"><span class="ftt-val">${totals.kills}</span><span class="ftt-label">Kills</span></div>
+      <div class="ftt-item"><span class="ftt-val">${Math.round(totals.damage).toLocaleString()}</span><span class="ftt-label">Damage</span></div>
+      <div class="ftt-item"><span class="ftt-val">${totals.total_potions}</span><span class="ftt-label">Potions</span></div>
+      <div class="ftt-item"><span class="ftt-val">${totals.pearls}</span><span class="ftt-label">Pearls</span></div>
+      <div class="ftt-item"><span class="ftt-val">${totals.food}</span><span class="ftt-label">Food</span></div>
+      <div class="ftt-item"><span class="ftt-val">${totals.golem_kills}</span><span class="ftt-label">Golems</span></div>
+      <div class="ftt-item"><span class="ftt-val">${totals.charges}</span><span class="ftt-label">Charges</span></div>
+    </div>`;
+
+  el.innerHTML = `
+    <div class="fight-detail-header">
+      <button class="back-btn" onclick="backToFightList()">← Back</button>
+      <div class="fight-detail-title">${filename.replace('.txt','').replace(/_/g,' ')}</div>
+      <div class="fight-detail-meta">
+        ${fight.location} &nbsp;·&nbsp; ${fight.duration} &nbsp;·&nbsp;
+        <span class="fight-winner-inline ${fight.winner === 'attackers' ? 'fight-winner--att' : 'fight-winner--def'}">${winnerLabel} Win</span>
+        ${fight.mutator ? `&nbsp;·&nbsp; <span class="fight-mutator">${fight.mutator}</span>` : ''}
+      </div>
+    </div>
+
+    <div class="fight-teams-grid">
+      <div class="fight-team-panel fight-team-panel--att">
+        <div class="fight-team-header fight-team-header--att">
+          ⚔ Attackers <span class="fight-team-count">${fight.attackers.length} players</span>
+        </div>
+        ${fight.attacker_totals ? renderTeamTotals(fight.attacker_totals, 'att') : ''}
+        <div class="fight-leaderboard-header">
+          <span class="lbh-rank">Rank</span>
+          <span class="lbh-name">Player</span>
+          <span class="lbh-kda">K/D/A</span>
+          <span class="lbh-dmg">Dmg</span>
+        </div>
+        <div class="fight-leaderboard">
+          ${renderLeaderboard(fight.attackers, 'att', 'Attacker')}
+        </div>
+      </div>
+
+      <div class="fight-team-panel fight-team-panel--def">
+        <div class="fight-team-header fight-team-header--def">
+          🛡 Defenders <span class="fight-team-count">${fight.defenders.length} players</span>
+        </div>
+        ${fight.defender_totals ? renderTeamTotals(fight.defender_totals, 'def') : ''}
+        <div class="fight-leaderboard-header">
+          <span class="lbh-rank">Rank</span>
+          <span class="lbh-name">Player</span>
+          <span class="lbh-kda">K/D/A</span>
+          <span class="lbh-dmg">Dmg</span>
+        </div>
+        <div class="fight-leaderboard">
+          ${renderLeaderboard(fight.defenders, 'def', 'Defender')}
+        </div>
+      </div>
+    </div>`;
+}
+
+function openFightPlayerModal(playerName, teamLabel) {
+  const fight = currentFightData;
+  if (!fight) return;
+  const allPlayers = [...fight.attackers, ...fight.defenders];
+  const p = allPlayers.find(x => x.name === playerName);
+  if (!p) return;
+
+  document.getElementById('fightModalName').textContent = p.name;
+  document.getElementById('fightModalSubtitle').textContent = `${p.town} · ${teamLabel}`;
+
+  const potionRows = Object.entries(p.potions)
+    .sort((a,b) => b[1]-a[1])
+    .map(([type, count]) => `<div class="detail-stat-row"><span>${type}</span><span class="detail-stat-val">${count}</span></div>`)
+    .join('') || '<div class="empty-state" style="font-size:12px">None</div>';
+
+  const foodRows = Object.entries(p.food)
+    .sort((a,b) => b[1]-a[1])
+    .map(([type, count]) => `<div class="detail-stat-row"><span>${type}</span><span class="detail-stat-val">${count}</span></div>`)
+    .join('') || '<div class="empty-state" style="font-size:12px">None</div>';
+
+  const hasObjective = p.golem_kills || p.charges_taken || p.charge_part;
+  const hasMisc      = p.shulkers_broken || p.shulkers_placed || p.blocks_broken || p.items_dropped || p.ancient_ingots;
+
+  document.getElementById('fightModalBody').innerHTML = `
+    <div class="fight-modal-kda">
+      <div class="fight-modal-stat">
+        <div class="fight-modal-stat-val kda-k">${p.kills}</div>
+        <div class="fight-modal-stat-label">Kills</div>
+      </div>
+      <div class="fight-modal-stat">
+        <div class="fight-modal-stat-val kda-d">${p.deaths}</div>
+        <div class="fight-modal-stat-label">Deaths</div>
+      </div>
+      <div class="fight-modal-stat">
+        <div class="fight-modal-stat-val kda-a">${p.assists}</div>
+        <div class="fight-modal-stat-label">Assists</div>
+      </div>
+      <div class="fight-modal-stat">
+        <div class="fight-modal-stat-val">${p.pearls}</div>
+        <div class="fight-modal-stat-label">Pearls</div>
+      </div>
+    </div>
+    <div class="fight-modal-dmg-row">
+      <span>${p.damage_dealt.toLocaleString(undefined,{maximumFractionDigits:1})} dmg dealt</span>
+      <span>${p.damage_taken.toLocaleString(undefined,{maximumFractionDigits:1})} dmg taken</span>
+      <span>${p.total_hits} hits · ${p.crit_ratio}% crit</span>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-title">Potions Thrown</div>
+      ${potionRows}
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-title">Food Consumed</div>
+      ${foodRows}
+    </div>
+    ${hasObjective ? `
+    <div class="detail-section">
+      <div class="detail-section-title">Objective</div>
+      ${p.golem_kills   ? `<div class="detail-stat-row"><span>Golem Kills</span><span class="detail-stat-val">${p.golem_kills}</span></div>` : ''}
+      ${p.charges_taken ? `<div class="detail-stat-row"><span>Charges Taken</span><span class="detail-stat-val">${p.charges_taken}</span></div>` : ''}
+      ${p.charge_part   ? `<div class="detail-stat-row"><span>Charge Participation</span><span class="detail-stat-val">${p.charge_part}</span></div>` : ''}
+    </div>` : ''}
+    ${hasMisc ? `
+    <div class="detail-section">
+      <div class="detail-section-title">Misc</div>
+      ${p.shulkers_placed  ? `<div class="detail-stat-row"><span>Shulkers Placed</span><span class="detail-stat-val">${p.shulkers_placed}</span></div>` : ''}
+      ${p.shulkers_broken  ? `<div class="detail-stat-row"><span>Shulkers Broken</span><span class="detail-stat-val">${p.shulkers_broken}</span></div>` : ''}
+      ${p.blocks_broken    ? `<div class="detail-stat-row"><span>Blocks Broken</span><span class="detail-stat-val">${p.blocks_broken}</span></div>` : ''}
+      ${p.items_dropped    ? `<div class="detail-stat-row"><span>Items Dropped</span><span class="detail-stat-val">${p.items_dropped}</span></div>` : ''}
+      ${p.ancient_ingots   ? `<div class="detail-stat-row"><span>Ancient Ingots</span><span class="detail-stat-val">${p.ancient_ingots}</span></div>` : ''}
+    </div>` : ''}
+  `;
+
+  document.getElementById('fightPlayerModal').style.display = 'flex';
+}
+
+function closeFightPlayerModal() {
+  document.getElementById('fightPlayerModal').style.display = 'none';
+}
