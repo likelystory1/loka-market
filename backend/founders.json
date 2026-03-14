@@ -1,23 +1,50 @@
 [
   {
+    "type": "founder",
     "name": "ArcherSquid",
     "uuid": "d5914f709c7c4599a797206e611ce0ad",
-    "title": "General & Warlord — Returned",
+    "title": "1/4 — General & Warlord — Returned",
     "rank": "GENERAL",
     "note": "When Stromgarde was left to die by its founders, ArcherSquid arrived — new to the server, hungry for conquest. He rebuilt the town from nothing, recruited Teyuh and Inapplicable, and forged a PvP alliance powerful enough to overpower Iblis, the dominant force in Kalros. His return to Loka is not a comeback. It is a reckoning."
   },
   {
+    "type": "founder",
     "name": "Inapplicable",
     "uuid": "07009f1aa60f448590fbeba801a5f3d0",
-    "title": "General & Architect — Keeper of the Fort",
+    "title": "2/4 — General & Architect — Keeper of the Fort",
     "rank": "GENERAL",
     "note": "While others moved on to new continents and new wars, Inapplicable stayed. For years he held Stromgarde together through inactivity, political pressure, and the slow creep of Iblis reclaiming Kalros. The walls still stand because of him. Now, with ArcherSquid returning, the sleeping giant of the north is waking up — and the server will remember what Stromgarde means."
   },
   {
+    "type": "founder",
     "name": "Teyu",
     "uuid": "5284d4abdb1444f2bb98434cf50b323c",
-    "title": "",
+    "title": "3/4",
     "rank": "GENERAL",
     "note": "Teyu."
+  },
+  {
+    "type": "founder",
+    "name": "FatalDeath",
+    "uuid": "811b22e63d084967bf9dc99d12a4c751",
+    "title": "4/4 — GARDIAN FQTALDEF — The Final Piece of the Puzzle",
+    "rank": "GENERAL",
+    "note": "Torn from the ranks of Iblis and brought into the fold of Stromgarde, FatalDeath did not just switch sides — he became something far more dangerous. He carries the knowledge of the enemy and the fury of the converted. Stromgarde's fiercest warrior. They will know his name."
+  },
+  {
+    "type": "traitor",
+    "name": "sSteak",
+    "uuid": "1849e68a22d14d9cbe6f29f88fbb8b54",
+    "title": "Traitor",
+    "rank": "TRAITOR",
+    "note": "Turned their back on Stromgarde. Marked."
+  },
+  {
+    "type": "traitor",
+    "name": "ThePigGang",
+    "uuid": "5fd39e829ad646ebad38188cfde78fad",
+    "title": "Traitor",
+    "rank": "TRAITOR",
+    "note": "Turned their back on Stromgarde. Marked."
   }
 ]
