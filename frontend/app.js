@@ -1609,102 +1609,137 @@ else if (document.getElementById('terrFeed'))      initTerritories();
 else if (document.getElementById('fightList'))     initFightsPage();
 else if (document.getElementById('playerLb'))      initPlayersPage();
 
-// ── fights page ──────────────────────────────────────────────────────────
+// ── fights page (EldritchBot) ─────────────────────────────────────────────
 
-let currentFightData = null;
+const _ebPageSize  = 50;
+let _ebPage        = 1;
+let _ebTotal       = 0;
+let _ebFights      = [];
+let _ebLoading     = false;
+let _ebSearch      = '';
+let _ebPlayerSort  = 'kills';
+let currentEbFight = null;
 
 async function initFightsPage() {
   if (!document.getElementById('fightList')) return;
-  await _refreshFightList();
-  // Auto-refresh every 15s to pick up live fight updates
-  setInterval(_refreshFightList, 15000);
+  fetch('/api/eb_fights/stats').then(r => r.json()).then(s => {
+    const hdr = document.querySelector('.page-subtitle');
+    if (hdr && s.total_fights) hdr.textContent = `${s.total_fights.toLocaleString()} fights · ${s.unique_players.toLocaleString()} players · powered by EldritchBot`;
+  }).catch(() => {});
+  await _ebFetchPage(1);
 }
 
-async function _refreshFightList() {
+async function _ebFetchPage(page) {
+  if (_ebLoading) return;
+  _ebLoading = true;
+  _ebPage = page;
+  const list = document.getElementById('fightList');
+  list.innerHTML = '<div class="loading-state"><div class="spinner spinner--purple"></div><span>Loading fights…</span></div>';
   try {
-    const fights = await fetch('/api/fights').then(r => r.json());
-    // Only re-render the list if we're not viewing a fight detail
-    if (document.getElementById('fightList').style.display !== 'none') {
-      renderFightList(fights);
-    } else {
-      _allFights = fights; // keep cached for when user goes back
-    }
-  } catch (e) {
-    if (!_allFights.length)
-      document.getElementById('fightList').innerHTML = '<div class="empty-state">Failed to load fights.</div>';
+    const params = new URLSearchParams({ limit: _ebPageSize, offset: (_ebPage - 1) * _ebPageSize });
+    if (_ebSearch) params.set('town', _ebSearch);
+    const data = await fetch(`/api/eb_fights?${params}`).then(r => r.json());
+    _ebFights = data.fights || data;
+    _ebTotal  = data.total  || _ebFights.length;
+    _renderFightList();
+  } catch {
+    list.innerHTML = '<div class="empty-state">Failed to load fights.</div>';
   }
+  _ebLoading = false;
 }
 
-let _allFights = [];
-let _fightSort = 'kills';
+function _ebSearchReset() {
+  _ebSearch = document.getElementById('fightSearchInput')?.value.trim() || '';
+  _ebFetchPage(1);
+}
 
-function renderFightList(fights) {
-  _allFights = fights;
+function _renderFightList() {
   const el = document.getElementById('fightList');
-  if (!fights.length) {
-    el.innerHTML = '<div class="empty-state">No fight logs found.</div>';
+  if (!_ebFights.length) {
+    el.innerHTML = '<div class="empty-state">No fights found.</div>';
     return;
   }
-  const sorted = _sortedFights(fights, _fightSort);
+
+  const totalPages = Math.max(1, Math.ceil(_ebTotal / _ebPageSize));
+
+  const rows = _ebFights.map(f => {
+    const won    = f.attackers_won;
+    const winCls = won ? 'fight-winner--att' : 'fight-winner--def';
+    const attCls = won ? 'fr-town--att fr-town--winner' : 'fr-town--att';
+    const defCls = won ? 'fr-town--def' : 'fr-town--def fr-town--winner';
+    const dur    = f.duration_mins ? `${Math.round(f.duration_mins)}m` : '—';
+    const attK   = `${f.attacker_pkills ?? 0}K ${f.attacker_gkills ?? 0}G`;
+    const defK   = `${f.defender_pkills ?? 0}K ${f.defender_gkills ?? 0}G`;
+    const world  = f.world ? `<span class="fr-world">${f.world}</span>` : '<span></span>';
+    const date   = f.fight_date || '';
+    const time   = f.fight_time || '';
+    return `
+      <div class="fight-row" onclick="openEbFight('${f.id}')">
+        <div class="fr-date">
+          <span class="fr-date-d">${date}</span>
+          <span class="fr-date-t">${time}</span>
+        </div>
+        ${world}
+        <div class="fr-matchup">
+          <span class="fr-town ${attCls}">⚔ ${f.attacker_town || 'Attackers'}</span>
+          <span class="fr-kills fr-kills--att">${attK}</span>
+          <span class="fr-vs">vs</span>
+          <span class="fr-kills fr-kills--def">${defK}</span>
+          <span class="fr-town ${defCls}">🛡 ${f.defender_town || 'Defenders'}</span>
+        </div>
+        <div class="fr-meta">
+          <span class="fr-players">${f.total_players ?? '?'}p</span>
+          <span class="fr-dur">${dur}</span>
+        </div>
+        <div class="fight-winner-badge ${winCls}">${won ? (f.attacker_town||'ATK') : (f.defender_town||'DEF')} Win</div>
+      </div>`;
+  }).join('');
+
+  const pagBtn = (label, page, disabled, active = false) =>
+    `<button class="fight-page-btn${active?' active':''}" ${disabled?'disabled':''} onclick="_ebFetchPage(${page})">${label}</button>`;
+
+  const pageStart = Math.max(1, _ebPage - 2);
+  const pageEnd   = Math.min(totalPages, pageStart + 4);
+  const pagNums   = Array.from({length: pageEnd - pageStart + 1}, (_,i) => pageStart+i)
+    .map(p => pagBtn(p, p, false, p === _ebPage)).join('');
+
+  const pagination = `
+    <div class="fight-pagination">
+      ${pagBtn('«', 1, _ebPage === 1)}
+      ${pagBtn('‹', _ebPage - 1, _ebPage === 1)}
+      ${pagNums}
+      ${pagBtn('›', _ebPage + 1, _ebPage === totalPages)}
+      ${pagBtn('»', totalPages, _ebPage === totalPages)}
+      <span class="fight-page-info">Page ${_ebPage} of ${totalPages} · ${_ebTotal.toLocaleString()} fights</span>
+    </div>`;
+
   el.innerHTML = `
     <div class="fight-list-controls">
-      <span class="fight-sort-label">Sort:</span>
-      ${['kills','date'].map(s => `
-        <button class="fight-sort-btn ${_fightSort===s?'active':''}" onclick="setFightSort('${s}')">${s==='kills'?'Most Kills':'Newest'}</button>
-      `).join('')}
+      <input id="fightSearchInput" class="search-input" placeholder="Filter by town…"
+             value="${_ebSearch}" style="max-width:260px"
+             oninput="clearTimeout(this._t);this._t=setTimeout(_ebSearchReset,350)">
     </div>
-    <div class="fights-grid">
-      ${sorted.map(f => {
-        const winnerLabel = f.is_live ? 'Live' : f.winner === 'attackers' ? 'Attackers Win' : f.winner === 'defenders' ? 'Defenders Win' : '';
-        const winnerClass = f.is_live ? 'fight-winner--live' : f.winner === 'attackers' ? 'fight-winner--att' : 'fight-winner--def';
-        const title = f.location && f.territory_num
-          ? `Battle For ${f.location} ${f.territory_num}`
-          : (f.location || f.filename.replace('.txt','').replace(/_/g,' '));
-        const meta = [f.world, f.time_display, f.date_display, (f.total_players||0)+' players'].filter(Boolean).join(' · ');
-        return `
-          <div class="fight-card" onclick="openFight('${f.filename}')">
-            <div class="fight-card-header">
-              <div class="fight-card-name">${title}</div>
-              ${winnerLabel ? `<div class="fight-winner-badge ${winnerClass}">${winnerLabel}</div>` : ''}
-            </div>
-            <div class="fight-card-meta">${meta}</div>
-            <div class="fight-card-teams">
-              <div class="fight-team-pill fight-team-pill--att">
-                ⚔ ${f.attacker_town || 'Attackers'} · ${f.attacker_kills}K
-              </div>
-              <div class="fight-team-pill fight-team-pill--def">
-                🛡 ${f.defender_town || 'Defenders'} · ${f.defender_kills}K
-              </div>
-            </div>
-          </div>`;
-      }).join('')}
-    </div>`;
+    <div class="fight-table">
+      <div class="fight-table-head">
+        <span>Date</span><span>World</span>
+        <span style="text-align:center">Matchup</span>
+        <span>Size</span><span>Result</span>
+      </div>
+      ${rows}
+    </div>
+    ${pagination}`;
 }
 
-function _sortedFights(fights, sort) {
-  const f = [...fights];
-  if (sort === 'kills') {
-    f.sort((a, b) => (b.attacker_kills + b.defender_kills) - (a.attacker_kills + a.defender_kills));
-  }
-  // 'date' keeps server order (newest first by mtime)
-  return f;
-}
-
-function setFightSort(sort) {
-  _fightSort = sort;
-  renderFightList(_allFights);
-}
-
-async function openFight(filename) {
+async function openEbFight(fightId) {
   document.getElementById('fightList').style.display = 'none';
   const detail = document.getElementById('fightDetail');
   detail.style.display = '';
-  detail.innerHTML = '<div class="loading-state"><div class="spinner spinner--purple"></div><span>Parsing fight…</span></div>';
+  detail.innerHTML = '<div class="loading-state"><div class="spinner spinner--purple"></div><span>Loading fight…</span></div>';
   try {
-    const fight = await fetch(`/api/fights/${encodeURIComponent(filename)}`).then(r => r.json());
-    currentFightData = fight;
-    renderFightDetail(fight, filename);
-  } catch (e) {
+    const fight = await fetch(`/api/eb_fights/${encodeURIComponent(fightId)}`).then(r => r.json());
+    currentEbFight = fight;
+    _renderEbFightDetail(fight);
+  } catch {
     detail.innerHTML = '<div class="empty-state">Failed to load fight data.</div>';
   }
 }
@@ -1712,45 +1747,164 @@ async function openFight(filename) {
 function backToFightList() {
   document.getElementById('fightDetail').style.display = 'none';
   document.getElementById('fightList').style.display = '';
-  currentFightData = null;
+  currentEbFight = null;
 }
 
-let _playerSort = 'kills';
-
-function setPlayerSort(sort) {
-  _playerSort = sort;
-  if (currentFightData) renderFightDetail(currentFightData, currentFightData.filename);
+function setEbPlayerSort(sort) {
+  _ebPlayerSort = sort;
+  if (currentEbFight) _renderEbFightDetail(currentEbFight);
 }
 
-function _sortPlayers(players, sort) {
+function _ebSortPlayers(players) {
   const p = [...players];
-  if (sort === 'damage') p.sort((a, b) => b.damage_dealt - a.damage_dealt);
-  else if (sort === 'name') p.sort((a, b) => a.name.localeCompare(b.name));
-  else p.sort((a, b) => b.kills - a.kills || b.assists - a.assists || b.damage_dealt - a.damage_dealt);
+  if (_ebPlayerSort === 'golems') p.sort((a, b) => (b.gkills||0) - (a.gkills||0) || (b.pkills||0) - (a.pkills||0));
+  else if (_ebPlayerSort === 'lamps') p.sort((a, b) => (b.lamps||0) - (a.lamps||0));
+  else p.sort((a, b) => (b.pkills||0) - (a.pkills||0) || (b.assists||0) - (a.assists||0));
   return p;
 }
 
-function renderFightDetail(fight, filename) {
-  const winnerLabel = fight.winner === 'attackers' ? 'Attackers' : fight.winner === 'defenders' ? 'Defenders' : fight.winner;
-  const el = document.getElementById('fightDetail');
-  const title = fight.location && fight.territory_num
-    ? `Battle For ${fight.location} ${fight.territory_num}`
-    : (fight.location || filename.replace('.txt','').replace(/_/g,' '));
+/* Convert an EB fight row (from /api/eb_fights/<id>) into the same schema
+   as fights_parser.py so we can use one unified renderer. */
+function _ebToLokaFmt(row) {
+  const fd    = row.fight_data || {};
+  const fdAtt = fd.attackers?.players || [];
+  const fdDef = fd.defenders?.players || [];
 
-  const renderLeaderboard = (players, teamClass, teamLabel) => {
-    if (!players.length) return `<div class="empty-state">No players.</div>`;
-    const sorted = _sortPlayers(players, _playerSort);
-    return sorted.map((p, i) => {
-      const rank   = i + 1;
-      const rClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : '';
-      const rLabel = rank === 1 ? '1ST' : rank === 2 ? '2ND' : rank === 3 ? '3RD' : `#${rank}`;
+  const mapPlayer = (p) => ({
+    name:           p.name,
+    town:           p.town || '',
+    kills:          p.pkills || 0,
+    deaths:         p.deaths || 0,
+    assists:        Math.round(p.assists || 0),
+    pearls:         p.pearls || 0,
+    damage_dealt:   0,                          // not tracked by EB
+    damage_taken:   0,
+    total_hits:     0,
+    crits:          0,
+    crit_ratio:     0,
+    shulkers_broken:0,
+    shulkers_placed:0,
+    blocks_broken:  0,
+    items_dropped:  0,
+    golem_kills:    p.gkills || 0,
+    charges_taken:  p.lamps  || 0,
+    charge_part:    (p.charges || []).length,
+    ancient_ingots: p.ancientIngots || 0,
+    potions:        p.potions ? {'(total)': p.potions} : {},
+    food:           p.food    ? {'(total)': p.food}    : {},
+    // EB-specific extras passed through for richer modal
+    dps_avg:        p.dps?.avg  || null,
+    dps_max:        p.dps?.max  || null,
+    close_calls:    p.closeCalls || 0,
+    deathInfo:      p.deathInfo || [],
+    charges_arr:    p.charges   || [],
+  });
+
+  const sortFn = (a,b) =>
+    b.kills - a.kills || b.assists - a.assists || b.golem_kills - a.golem_kills;
+
+  const att = fdAtt.map(mapPlayer).sort(sortFn);
+  const def = fdDef.map(mapPlayer).sort(sortFn);
+
+  const totals = (players) => ({
+    kills:         players.reduce((s,p) => s + p.kills, 0),
+    damage:        0,
+    pearls:        players.reduce((s,p) => s + p.pearls, 0),
+    food:          players.reduce((s,p) => s + (p.food['(total)'] || 0), 0),
+    golem_kills:   players.reduce((s,p) => s + p.golem_kills, 0),
+    charges:       players.reduce((s,p) => s + p.charges_taken, 0),
+    charge_part:   players.reduce((s,p) => s + p.charge_part, 0),
+    total_potions: players.reduce((s,p) => s + (p.potions['(total)'] || 0), 0),
+  });
+
+  return {
+    filename:        row.id,
+    location:        row.location || '',
+    winner:          row.attackers_won ? row.attacker_town : row.defender_town,
+    duration:        row.duration_mins ? `${Math.round(row.duration_mins)} minutes` : '',
+    mutator:         '',
+    attacker_town:   row.attacker_town || '',
+    defender_town:   row.defender_town || '',
+    world:           row.world || '',
+    date_display:    row.fight_date || '',
+    time_display:    row.fight_time || '',
+    attackers:       att,
+    defenders:       def,
+    attacker_kills:  att.reduce((s,p) => s + p.kills, 0),
+    defender_kills:  def.reduce((s,p) => s + p.kills, 0),
+    attacker_totals: totals(att),
+    defender_totals: totals(def),
+  };
+}
+
+function _ebTotals(players) {
+  return players.reduce((t, p) => ({
+    kills:   t.kills   + (p.pkills  || 0),
+    golems:  t.golems  + (p.gkills  || 0),
+    charges: t.charges + (p.lamps   || 0),
+    potions: t.potions + (p.potions || 0),
+    pearls:  t.pearls  + (p.pearls  || 0),
+    food:    t.food    + (p.food    || 0),
+  }), { kills:0, golems:0, charges:0, potions:0, pearls:0, food:0 });
+}
+
+function _renderEbFightDetail(row) {
+  // Convert EB JSON → Loka format, then use shared renderer
+  const loka = _ebToLokaFmt(row);
+  _renderFightDetail(loka, row);
+}
+
+/* Shared fight detail renderer — accepts Loka-format fight object.
+   ebRaw is the original EB row (for modal access), null for native Loka fights. */
+function _renderFightDetail(fight, ebRaw) {
+  // Store for modal use
+  currentEbFight = ebRaw || fight;
+
+  const won     = fight.winner === fight.attacker_town;
+  const winCls  = won ? 'fight-winner--att' : 'fight-winner--def';
+  const winLbl  = fight.winner ? `${fight.winner} Win` : 'Draw';
+  const dur     = fight.duration || '';
+  const total   = (fight.attackers?.length||0) + (fight.defenders?.length||0);
+  const metaParts = [fight.world, fight.time_display, fight.date_display,
+                     total + ' players', dur].filter(Boolean);
+
+  const renderTotals = (t, cls) => {
+    const stats = [
+      [t.kills,                         'Kills'],
+      [t.total_potions?.toLocaleString() || 0, 'Potions'],
+      [t.pearls,                        'Pearls'],
+      [t.food,                          'Food'],
+      [t.golem_kills,                   'Golems'],
+      [t.charges,                       'Charges'],
+    ];
+    return `<div class="fight-team-totals fight-team-totals--${cls}">
+      ${stats.map(([v,l]) => `
+        <div class="ftt-item">
+          <span class="ftt-val">${v}</span>
+          <span class="ftt-label">${l}</span>
+        </div>`).join('')}
+    </div>`;
+  };
+
+  const renderPlayers = (players, cls, side) => {
+    if (!players?.length) return '<div class="empty-state">No data.</div>';
+    return players.map((p, i) => {
+      const rLabel = i === 0 ? '1ST' : i === 1 ? '2ND' : i === 2 ? '3RD' : `#${i+1}`;
+      const rClass = i < 3 ? `rank-${i+1}` : '';
+      const dpsVal = p.dps_avg ? `${parseFloat(p.dps_avg).toFixed(1)} DPS`
+                               : p.damage_dealt ? p.damage_dealt.toLocaleString()
+                               : '—';
+      const rightTitle = p.dps_avg ? 'Avg DPS' : 'Damage Dealt';
       return `
-        <div class="fight-player-row ${teamClass}-row" onclick="openFightPlayerModal('${p.name}', '${teamLabel}')">
+        <div class="fight-player-row ${cls}-row"
+             onclick="openEbPlayerModal('${p.name.replace(/'/g,"\\'")}','${side}')">
           <div class="fight-player-rank ${rClass}">${rLabel}</div>
-          <img class="fight-player-head" src="https://mc-heads.net/avatar/${encodeURIComponent(p.name)}/24" alt="" loading="lazy">
+          <img class="fight-player-head"
+               src="https://mc-heads.net/avatar/${encodeURIComponent(p.name)}/24"
+               alt="" loading="lazy">
           <div class="fight-player-info">
             <div class="fight-player-name">${p.name}</div>
-            <div class="fight-player-town">${p.town}</div>
+            <div class="fight-player-town">${p.town || ''}</div>
           </div>
           <div class="fight-player-kda">
             <span class="kda-k">${p.kills}</span>
@@ -1759,163 +1913,91 @@ function renderFightDetail(fight, filename) {
             <span class="kda-sep">/</span>
             <span class="kda-a">${p.assists}</span>
           </div>
-          <div class="fight-player-dmg">${p.damage_dealt.toLocaleString(undefined, {maximumFractionDigits:0})}</div>
+          <div class="fight-player-dmg" title="${rightTitle}">${dpsVal}</div>
         </div>`;
     }).join('');
   };
 
-  const sortControls = `
-    <div class="fight-player-sort">
-      <span class="fight-sort-label">Sort:</span>
-      ${['kills','damage','name'].map(s => `
-        <button class="fight-sort-btn ${_playerSort===s?'active':''}" onclick="setPlayerSort('${s}')">${s==='kills'?'Kills':s==='damage'?'Damage':'Name A–Z'}</button>
-      `).join('')}
+  const teamPanel = (town, icon, players, totals, cls, side) => `
+    <div class="fight-team-panel fight-team-panel--${cls}">
+      <div class="fight-team-header fight-team-header--${cls}">
+        <div class="fight-team-header-main">${icon} ${town || (cls==='att'?'Attackers':'Defenders')}</div>
+        <span class="fight-team-count">${players?.length||0} players</span>
+      </div>
+      ${renderTotals(totals, cls)}
+      <div class="fight-leaderboard-header">
+        <span class="lbh-rank">Rank</span><span></span>
+        <span class="lbh-name">Player</span>
+        <span class="lbh-kda">K/D/A</span>
+        <span class="lbh-dmg">${fight.attackers?.[0]?.dps_avg != null ? 'Avg DPS' : 'Dmg'}</span>
+      </div>
+      <div class="fight-leaderboard">${renderPlayers(players, cls, side)}</div>
     </div>`;
 
-  const renderTeamTotals = (totals, cls) => `
-    <div class="fight-team-totals fight-team-totals--${cls}">
-      <div class="ftt-item"><span class="ftt-val">${totals.kills}</span><span class="ftt-label">Kills</span></div>
-      <div class="ftt-item"><span class="ftt-val">${Math.round(totals.damage).toLocaleString()}</span><span class="ftt-label">Damage</span></div>
-      <div class="ftt-item"><span class="ftt-val">${totals.total_potions}</span><span class="ftt-label">Potions</span></div>
-      <div class="ftt-item"><span class="ftt-val">${totals.pearls}</span><span class="ftt-label">Pearls</span></div>
-      <div class="ftt-item"><span class="ftt-val">${totals.food}</span><span class="ftt-label">Food</span></div>
-      <div class="ftt-item"><span class="ftt-val">${totals.golem_kills}</span><span class="ftt-label">Golems</span></div>
-      <div class="ftt-item"><span class="ftt-val">${totals.charges}</span><span class="ftt-label">Charges</span></div>
-    </div>`;
-
-  const totalPlayers = fight.attackers.length + fight.defenders.length;
-  const metaParts = [fight.world, fight.time_display, fight.date_display, totalPlayers + ' players'].filter(Boolean);
-
-  el.innerHTML = `
+  document.getElementById('fightDetail').innerHTML = `
     <div class="fight-detail-header">
       <button class="back-btn" onclick="backToFightList()">← Back</button>
       <div>
-        <div class="fight-detail-title">${title}</div>
+        <div class="fight-detail-title">${fight.attacker_town} vs ${fight.defender_town}</div>
         <div class="fight-detail-meta">
           ${metaParts.join(' &nbsp;·&nbsp; ')}
-          ${winnerLabel ? `&nbsp;·&nbsp; <span class="fight-winner-inline ${fight.winner === 'attackers' ? 'fight-winner--att' : 'fight-winner--def'}">${winnerLabel} Win</span>` : ''}
-          ${fight.mutator ? `&nbsp;·&nbsp; <span class="fight-mutator">${fight.mutator}</span>` : ''}
+          &nbsp;·&nbsp; <span class="fight-winner-inline ${winCls}">${winLbl}</span>
         </div>
       </div>
     </div>
-    ${sortControls}
-
     <div class="fight-teams-grid">
-      <div class="fight-team-panel fight-team-panel--att">
-        <div class="fight-team-header fight-team-header--att">
-          <div class="fight-team-header-main">
-            ⚔ ${fight.attacker_town || 'Attackers'}
-          </div>
-          <span class="fight-team-count">${fight.attackers.length} players</span>
-        </div>
-        ${fight.attacker_totals ? renderTeamTotals(fight.attacker_totals, 'att') : ''}
-        <div class="fight-leaderboard-header">
-          <span class="lbh-rank">Rank</span>
-          <span></span>
-          <span class="lbh-name">Player</span>
-          <span class="lbh-kda">K/D/A</span>
-          <span class="lbh-dmg">Dmg</span>
-        </div>
-        <div class="fight-leaderboard">
-          ${renderLeaderboard(fight.attackers, 'att', 'Attacker')}
-        </div>
-      </div>
-
-      <div class="fight-team-panel fight-team-panel--def">
-        <div class="fight-team-header fight-team-header--def">
-          <div class="fight-team-header-main">
-            🛡 ${fight.defender_town || 'Defenders'}
-          </div>
-          <span class="fight-team-count">${fight.defenders.length} players</span>
-        </div>
-        ${fight.defender_totals ? renderTeamTotals(fight.defender_totals, 'def') : ''}
-        <div class="fight-leaderboard-header">
-          <span class="lbh-rank">Rank</span>
-          <span></span>
-          <span class="lbh-name">Player</span>
-          <span class="lbh-kda">K/D/A</span>
-          <span class="lbh-dmg">Dmg</span>
-        </div>
-        <div class="fight-leaderboard">
-          ${renderLeaderboard(fight.defenders, 'def', 'Defender')}
-        </div>
-      </div>
+      ${teamPanel(fight.attacker_town, '⚔', fight.attackers, fight.attacker_totals, 'att', 'attacker')}
+      ${teamPanel(fight.defender_town, '🛡', fight.defenders, fight.defender_totals, 'def', 'defender')}
     </div>`;
 }
 
-function openFightPlayerModal(playerName, teamLabel) {
-  const fight = currentFightData;
+function openEbPlayerModal(playerName, side) {
+  const fight = currentEbFight;
   if (!fight) return;
-  const allPlayers = [...fight.attackers, ...fight.defenders];
-  const p = allPlayers.find(x => x.name === playerName);
+  const fd  = fight.fight_data || {};
+  const all = [...(fd.attackers?.players||[]), ...(fd.defenders?.players||[])];
+  const p   = all.find(x => x.name === playerName);
   if (!p) return;
 
   document.getElementById('fightModalName').textContent = p.name;
-  document.getElementById('fightModalSubtitle').textContent = `${p.town} · ${teamLabel}`;
+  document.getElementById('fightModalSubtitle').textContent =
+    `${p.town || ''} · ${side === 'attacker' ? fight.attacker_town : fight.defender_town}`;
 
-  const potionRows = Object.entries(p.potions)
-    .sort((a,b) => b[1]-a[1])
-    .map(([type, count]) => `<div class="detail-stat-row"><span>${type}</span><span class="detail-stat-val">${count}</span></div>`)
-    .join('') || '<div class="empty-state" style="font-size:12px">None</div>';
-
-  const foodRows = Object.entries(p.food)
-    .sort((a,b) => b[1]-a[1])
-    .map(([type, count]) => `<div class="detail-stat-row"><span>${type}</span><span class="detail-stat-val">${count}</span></div>`)
-    .join('') || '<div class="empty-state" style="font-size:12px">None</div>';
-
-  const hasObjective = p.golem_kills || p.charges_taken || p.charge_part;
-  const hasMisc      = p.shulkers_broken || p.shulkers_placed || p.blocks_broken || p.items_dropped || p.ancient_ingots;
+  const kd    = p.deaths ? (p.pkills / p.deaths).toFixed(2) : '∞';
+  const lampsArr = p.charges || [];  // charge events array
+  const deaths   = (p.deathInfo || []).map(d =>
+    `<div class="detail-stat-row"><span>Killed by ${d.killedBy || '?'}</span><span class="detail-stat-val">${d.time ? Math.round(d.time) + 'm' : ''}</span></div>`
+  ).join('') || '';
 
   document.getElementById('fightModalBody').innerHTML = `
     <div class="fight-modal-kda">
-      <div class="fight-modal-stat">
-        <div class="fight-modal-stat-val kda-k">${p.kills}</div>
-        <div class="fight-modal-stat-label">Kills</div>
-      </div>
-      <div class="fight-modal-stat">
-        <div class="fight-modal-stat-val kda-d">${p.deaths}</div>
-        <div class="fight-modal-stat-label">Deaths</div>
-      </div>
-      <div class="fight-modal-stat">
-        <div class="fight-modal-stat-val kda-a">${p.assists}</div>
-        <div class="fight-modal-stat-label">Assists</div>
-      </div>
-      <div class="fight-modal-stat">
-        <div class="fight-modal-stat-val">${p.pearls}</div>
-        <div class="fight-modal-stat-label">Pearls</div>
-      </div>
+      <div class="fight-modal-stat"><div class="fight-modal-stat-val kda-k">${p.pkills||0}</div><div class="fight-modal-stat-label">Kills</div></div>
+      <div class="fight-modal-stat"><div class="fight-modal-stat-val kda-d">${p.deaths||0}</div><div class="fight-modal-stat-label">Deaths</div></div>
+      <div class="fight-modal-stat"><div class="fight-modal-stat-val kda-a">${Math.round(p.assists||0)}</div><div class="fight-modal-stat-label">Assists</div></div>
+      <div class="fight-modal-stat"><div class="fight-modal-stat-val">${p.pearls||0}</div><div class="fight-modal-stat-label">Pearls</div></div>
     </div>
     <div class="fight-modal-dmg-row">
-      <span>${p.damage_dealt.toLocaleString(undefined,{maximumFractionDigits:1})} dmg dealt</span>
-      <span>${p.damage_taken.toLocaleString(undefined,{maximumFractionDigits:1})} dmg taken</span>
-      <span>${p.total_hits} hits · ${p.crit_ratio}% crit</span>
+      <span>${kd} K/D</span>
+      <span>${p.lamps||0} lamps · ${p.gkills||0} golems</span>
+      ${p.closeCalls ? `<span>${p.closeCalls} close calls</span>` : ''}
     </div>
-    <div class="detail-section">
-      <div class="detail-section-title">Potions Thrown</div>
-      ${potionRows}
+    <div class="fight-modal-dmg-row" style="margin-top:4px">
+      <span>${p.potions||0} potions</span>
+      <span>${p.food||0} food</span>
+      ${p.ancientIngots ? `<span>${p.ancientIngots} ingots</span>` : ''}
+      ${p.dps ? `<span>DPS avg ${p.dps.avg} · max ${p.dps.max}</span>` : ''}
     </div>
+    ${lampsArr.length ? `
     <div class="detail-section">
-      <div class="detail-section-title">Food Consumed</div>
-      ${foodRows}
-    </div>
-    ${hasObjective ? `
-    <div class="detail-section">
-      <div class="detail-section-title">Objective</div>
-      ${p.golem_kills   ? `<div class="detail-stat-row"><span>Golem Kills</span><span class="detail-stat-val">${p.golem_kills}</span></div>` : ''}
-      ${p.charges_taken ? `<div class="detail-stat-row"><span>Charges Taken</span><span class="detail-stat-val">${p.charges_taken}</span></div>` : ''}
-      ${p.charge_part   ? `<div class="detail-stat-row"><span>Charge Participation</span><span class="detail-stat-val">${p.charge_part}</span></div>` : ''}
+      <div class="detail-section-title">Charge Times</div>
+      ${lampsArr.map(c => `<div class="detail-stat-row"><span>Charge</span><span class="detail-stat-val">${c.time != null ? c.time.toFixed(1) + 'm' : '—'}</span></div>`).join('')}
     </div>` : ''}
-    ${hasMisc ? `
+    ${deaths ? `
     <div class="detail-section">
-      <div class="detail-section-title">Misc</div>
-      ${p.shulkers_placed  ? `<div class="detail-stat-row"><span>Shulkers Placed</span><span class="detail-stat-val">${p.shulkers_placed}</span></div>` : ''}
-      ${p.shulkers_broken  ? `<div class="detail-stat-row"><span>Shulkers Broken</span><span class="detail-stat-val">${p.shulkers_broken}</span></div>` : ''}
-      ${p.blocks_broken    ? `<div class="detail-stat-row"><span>Blocks Broken</span><span class="detail-stat-val">${p.blocks_broken}</span></div>` : ''}
-      ${p.items_dropped    ? `<div class="detail-stat-row"><span>Items Dropped</span><span class="detail-stat-val">${p.items_dropped}</span></div>` : ''}
-      ${p.ancient_ingots   ? `<div class="detail-stat-row"><span>Ancient Ingots</span><span class="detail-stat-val">${p.ancient_ingots}</span></div>` : ''}
+      <div class="detail-section-title">Deaths</div>
+      ${deaths}
     </div>` : ''}
   `;
-
   document.getElementById('fightPlayerModal').style.display = 'flex';
 }
 
