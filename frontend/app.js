@@ -1735,12 +1735,21 @@ async function openEbFight(fightId) {
   const detail = document.getElementById('fightDetail');
   detail.style.display = '';
   detail.innerHTML = '<div class="loading-state"><div class="spinner spinner--purple"></div><span>Loading fight…</span></div>';
+  let fight;
   try {
-    const fight = await fetch(`/api/eb_fights/${encodeURIComponent(fightId)}`).then(r => r.json());
-    currentEbFight = fight;
+    const r = await fetch(`/api/eb_fights/${encodeURIComponent(fightId)}`);
+    if (!r.ok) throw new Error(`Server returned ${r.status}`);
+    fight = await r.json();
+  } catch (e) {
+    detail.innerHTML = `<div class="empty-state">Failed to load fight (${e.message}).</div>`;
+    return;
+  }
+  currentEbFight = fight;
+  try {
     _renderEbFightDetail(fight);
-  } catch {
-    detail.innerHTML = '<div class="empty-state">Failed to load fight data.</div>';
+  } catch (e) {
+    console.error('Render error:', e);
+    detail.innerHTML = `<div class="empty-state">Render error: ${e.message}</div>`;
   }
 }
 
