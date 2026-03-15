@@ -1611,53 +1611,58 @@ else if (document.getElementById('playerLb'))      initPlayersPage();
 
 // ── fights page ───────────────────────────────────────────────────────────────
 
-const _fPageSize = 10;
-let _fPage       = 1;
-let _fTotal      = 0;
-let _fFights     = [];
-let _fLoading    = false;
-let _fSearch     = '';
+const _fPageSize  = 10;
+let _fPage        = 1;
+let _fAllFights   = [];  // full index loaded once
+let _fFiltered    = [];  // after search filter
+let _fSearch      = '';
 let _currentFight = null;
 
 async function initFightsPage() {
   if (!document.getElementById('fightList')) return;
-  await _fFetchPage(1);
-}
-
-async function _fFetchPage(page) {
-  if (_fLoading) return;
-  _fLoading = true;
-  _fPage = page;
   const list = document.getElementById('fightList');
   list.innerHTML = '<div class="loading-state"><div class="spinner spinner--purple"></div><span>Loading fights…</span></div>';
   try {
-    const params = new URLSearchParams({ limit: _fPageSize, offset: (_fPage - 1) * _fPageSize });
-    if (_fSearch) params.set('town', _fSearch);
-    const data = await fetch(`/api/fights?${params}`).then(r => r.json());
-    _fFights = data.fights || data;
-    _fTotal  = data.total  || _fFights.length;
+    const r = await fetch('/api/fights-index');
+    if (!r.ok) throw new Error(r.status);
+    _fAllFights = await r.json();
+    _fFiltered  = _fAllFights;
+    _fPage      = 1;
     _renderFightList();
-  } catch {
-    list.innerHTML = '<div class="empty-state">Failed to load fights.</div>';
+  } catch (e) {
+    list.innerHTML = `<div class="empty-state">Failed to load fights (${e.message}).</div>`;
   }
-  _fLoading = false;
+}
+
+function _fGoPage(page) {
+  _fPage = page;
+  _renderFightList();
+  document.getElementById('fightList').scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
 function _fSearchReset() {
-  _fSearch = document.getElementById('fightSearchInput')?.value.trim() || '';
-  _fFetchPage(1);
+  _fSearch   = document.getElementById('fightSearchInput')?.value.trim().toLowerCase() || '';
+  _fFiltered = _fSearch
+    ? _fAllFights.filter(f =>
+        f.attacker_town.toLowerCase().includes(_fSearch) ||
+        f.defender_town.toLowerCase().includes(_fSearch))
+    : _fAllFights;
+  _fPage = 1;
+  _renderFightList();
 }
 
 function _renderFightList() {
   const el = document.getElementById('fightList');
-  if (!_fFights.length) {
+  if (!_fFiltered.length) {
     el.innerHTML = '<div class="empty-state">No fights found.</div>';
     return;
   }
 
-  const totalPages = Math.max(1, Math.ceil(_fTotal / _fPageSize));
+  const totalPages = Math.max(1, Math.ceil(_fFiltered.length / _fPageSize));
+  const offset     = (_fPage - 1) * _fPageSize;
+  const page       = _fFiltered.slice(offset, offset + _fPageSize);
 
-  const rows = _fFights.map(f => {
+  const rows = page.map(f => {
     const won    = f.winner === f.attacker_town;
     const winCls = won ? 'fight-winner--att' : 'fight-winner--def';
     const attCls = won ? 'fr-town--att fr-town--winner' : 'fr-town--att';
@@ -1688,8 +1693,8 @@ function _renderFightList() {
       </div>`;
   }).join('');
 
-  const pagBtn = (label, page, disabled, active = false) =>
-    `<button class="fight-page-btn${active?' active':''}" ${disabled?'disabled':''} onclick="_fFetchPage(${page})">${label}</button>`;
+  const pagBtn = (label, pg, disabled, active = false) =>
+    `<button class="fight-page-btn${active?' active':''}" ${disabled?'disabled':''} onclick="_fGoPage(${pg})">${label}</button>`;
 
   const pageStart = Math.max(1, _fPage - 2);
   const pageEnd   = Math.min(totalPages, pageStart + 4);
@@ -1716,7 +1721,7 @@ function _renderFightList() {
       ${pagNums}
       ${pagBtn('›', _fPage + 1, _fPage === totalPages)}
       ${pagBtn('»', totalPages, _fPage === totalPages)}
-      <span class="fight-page-info">Page ${_fPage} of ${totalPages} · ${_fTotal.toLocaleString()} fights</span>
+      <span class="fight-page-info">Page ${_fPage} of ${totalPages} · ${_fFiltered.length.toLocaleString()} fights</span>
     </div>`;
 }
 
