@@ -625,6 +625,16 @@ def _rebuild_fights_index():
     _fights_rebuilding = False
     return results
 
+@app.route("/api/fights-index")
+def api_fights_index():
+    """Serve the pre-built fights index file directly."""
+    if not os.path.exists(_FIGHTS_INDEX_PATH):
+        return jsonify([])
+    return app.response_class(
+        open(_FIGHTS_INDEX_PATH, 'rb').read(),
+        content_type='application/json'
+    )
+
 @app.route("/api/fights")
 def api_fights():
     """List all pre-parsed fight JSON files with pagination."""
