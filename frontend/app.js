@@ -1653,8 +1653,15 @@ function _fSearchReset() {
 
 function _renderFightList() {
   const el = document.getElementById('fightList');
+  const searchBar = `
+    <div class="fight-list-controls">
+      <input id="fightSearchInput" class="search-input" placeholder="Filter by town…"
+             value="${_fSearch}" style="max-width:260px"
+             oninput="clearTimeout(this._t);this._t=setTimeout(_fSearchReset,350)">
+    </div>`;
   if (!_fFiltered.length) {
-    el.innerHTML = '<div class="empty-state">No fights found.</div>';
+    el.innerHTML = searchBar + '<div class="empty-state">No fights found.</div>';
+    document.getElementById('fightSearchInput').focus();
     return;
   }
 
@@ -1701,12 +1708,7 @@ function _renderFightList() {
   const pagNums   = Array.from({length: pageEnd - pageStart + 1}, (_,i) => pageStart+i)
     .map(p => pagBtn(p, p, false, p === _fPage)).join('');
 
-  el.innerHTML = `
-    <div class="fight-list-controls">
-      <input id="fightSearchInput" class="search-input" placeholder="Filter by town…"
-             value="${_fSearch}" style="max-width:260px"
-             oninput="clearTimeout(this._t);this._t=setTimeout(_fSearchReset,350)">
-    </div>
+  el.innerHTML = searchBar + `
     <div class="fight-table">
       <div class="fight-table-head">
         <span>Date</span><span>World</span>
@@ -1760,10 +1762,11 @@ function _renderFightDetail(fight) {
   const winLbl  = fight.winner ? `${fight.winner} Win` : 'Draw';
   const dur     = fight.duration || '';
   const total   = (fight.attackers?.length||0) + (fight.defenders?.length||0);
-  const metaParts = [fight.world, fight.time_display, fight.date_display,
+  const metaParts = [fight.location || fight.world, fight.date_display, fight.time_display,
                      total + ' players', dur].filter(Boolean);
 
   const renderTotals = (t, cls) => {
+    if (!t) return '';
     const stats = [
       [t.kills,                         'Kills'],
       [t.total_potions?.toLocaleString() || 0, 'Potions'],
