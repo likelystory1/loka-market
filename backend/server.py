@@ -608,7 +608,7 @@ def _rebuild_fights_index():
             })
         except Exception as e:
             print(f'[fights] error reading {path.name}: {e}')
-    results.sort(key=lambda r: (not r['is_live'], -r['_mtime']))
+    results.sort(key=lambda r: (not r['is_live'], r['attacker_town'].lower()))
     for r in results:
         del r['_mtime']
     # Save to disk so next startup is instant
