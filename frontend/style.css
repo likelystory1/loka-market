@@ -1580,7 +1580,7 @@ img { display: block; }
 .fight-table { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--border-dim); border-radius: var(--radius-lg); overflow: hidden; }
 
 .fight-table-head {
-  display: grid; grid-template-columns: 110px 80px 1fr 70px 120px;
+  display: grid; grid-template-columns: 110px 80px 1fr 70px 150px;
   padding: 8px 16px; background: var(--surface);
   font-size: 10px; font-weight: 700; color: var(--dim);
   text-transform: uppercase; letter-spacing: .08em;
@@ -1588,7 +1588,7 @@ img { display: block; }
 }
 
 .fight-row {
-  display: grid; grid-template-columns: 110px 80px 1fr 70px 120px;
+  display: grid; grid-template-columns: 110px 80px 1fr 70px 150px;
   align-items: center; padding: 11px 16px;
   border-bottom: 1px solid var(--border-dim);
   cursor: pointer; transition: background .14s;
@@ -1609,13 +1609,17 @@ img { display: block; }
   flex-wrap: wrap; padding: 0 8px;
 }
 .fr-town { font-size: 12px; font-weight: 700; }
-.fr-town--att { color: #818cf8; }
+.fr-town--att { color: #2dd4bf; }
 .fr-town--def { color: #f59e0b; }
 .fr-town--winner { text-shadow: 0 0 12px currentColor; }
 
 .fr-kills { font-size: 11px; font-weight: 600; color: var(--dim); white-space: nowrap; }
-.fr-kills--att { color: rgba(129,140,248,.65); }
+.fr-kills--att { color: rgba(45,212,191,.65); }
 .fr-kills--def { color: rgba(245,158,11,.65); }
+
+.fr-result-mark { font-size: 11px; font-weight: 700; }
+.fr-win  { color: #10b981; }
+.fr-loss { color: #ef4444; }
 
 .fr-vs { font-size: 10px; color: var(--dim); font-weight: 600; padding: 0 2px; }
 
@@ -1655,8 +1659,8 @@ img { display: block; }
 
 .fight-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .fight-card-name { font-size: 14px; font-weight: 700; color: var(--text); }
-.fight-winner-badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
-.fight-winner--att { background: rgba(99,102,241,.18); color: #818cf8; border: 1px solid rgba(99,102,241,.3); }
+.fight-winner-badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px; text-align: center; }
+.fight-winner--att { background: rgba(45,212,191,.15); color: #2dd4bf; border: 1px solid rgba(45,212,191,.35); }
 .fight-winner--def { background: rgba(245,158,11,.15); color: #f59e0b; border: 1px solid rgba(245,158,11,.3); }
 .fight-winner--live { background: rgba(34,197,94,.15); color: #4ade80; border: 1px solid rgba(34,197,94,.3); animation: pulse-live 1.5s ease-in-out infinite; }
 @keyframes pulse-live { 0%,100% { opacity:1; } 50% { opacity:.6; } }
@@ -1672,8 +1676,18 @@ img { display: block; }
 
 .fight-card-teams { display: flex; gap: 8px; flex-wrap: wrap; }
 .fight-team-pill { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
-.fight-team-pill--att { background: rgba(99,102,241,.12); color: #818cf8; }
+.fight-team-pill--att { background: rgba(45,212,191,.12); color: #2dd4bf; }
 .fight-team-pill--def { background: rgba(245,158,11,.1); color: #f59e0b; }
+
+.fight-dmg-disclaimer {
+  margin-top: 14px; font-size: 13px; color: var(--muted);
+  font-style: italic; text-align: right; padding: 0 4px;
+  display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+}
+.fight-dmg-disclaimer::before {
+  content: '⚠';
+  font-style: normal; font-size: 15px; color: #f59e0b;
+}
 
 /* Fight detail */
 .fight-detail-header {
@@ -1690,14 +1704,24 @@ img { display: block; }
 
 .fight-team-panel {
   background: var(--surface); border: 1px solid var(--border-dim);
-  border-radius: var(--radius-lg); overflow: hidden;
+  border-radius: var(--radius-lg); overflow: hidden; transition: box-shadow .2s;
 }
+.fight-team-panel--winner.fight-team-panel--att {
+  border-color: rgba(45,212,191,.45);
+  box-shadow: 0 0 28px rgba(45,212,191,.18), inset 0 0 0 1px rgba(45,212,191,.15);
+}
+.fight-team-panel--winner.fight-team-panel--def {
+  border-color: rgba(245,158,11,.45);
+  box-shadow: 0 0 28px rgba(245,158,11,.18), inset 0 0 0 1px rgba(245,158,11,.15);
+}
+
+.team-result-mark { font-size: 15px; margin-left: 6px; }
 .fight-team-header {
   font-size: 13px; font-weight: 700; padding: 14px 18px;
   display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
   border-bottom: 1px solid var(--border-dim);
 }
-.fight-team-header--att { color: #818cf8; background: rgba(99,102,241,.08); }
+.fight-team-header--att { color: #2dd4bf; background: rgba(45,212,191,.07); }
 .fight-team-header--def { color: #f59e0b; background: rgba(245,158,11,.08); }
 .fight-team-header-main { line-height: 1.4; }
 .fight-team-count { font-size: 11px; font-weight: 500; color: var(--muted); white-space: nowrap; margin-top: 2px; }
@@ -1707,7 +1731,7 @@ img { display: block; }
   display: flex; flex-wrap: wrap; gap: 0;
   border-bottom: 1px solid var(--border-dim);
 }
-.fight-team-totals--att { background: rgba(99,102,241,.05); }
+.fight-team-totals--att { background: rgba(45,212,191,.04); }
 .fight-team-totals--def { background: rgba(245,158,11,.04); }
 .ftt-item {
   flex: 1; min-width: 64px; display: flex; flex-direction: column;
@@ -1719,22 +1743,42 @@ img { display: block; }
 .ftt-label { font-size: 10px; color: var(--dim); margin-top: 2px; text-transform: uppercase; letter-spacing: .05em; }
 
 .fight-leaderboard-header {
-  display: grid; grid-template-columns: 48px 28px 1fr 80px 60px;
+  display: grid; grid-template-columns: 48px 28px 1fr 100px 80px 60px;
   padding: 8px 16px; font-size: 10px; font-weight: 600;
   color: var(--dim); text-transform: uppercase; letter-spacing: .08em;
   border-bottom: 1px solid var(--border-dim);
 }
 
 .fight-player-row {
-  display: grid; grid-template-columns: 48px 28px 1fr 80px 60px;
+  display: grid; grid-template-columns: 48px 28px 1fr 100px 80px 60px;
   padding: 10px 16px; align-items: center;
   border-bottom: 1px solid var(--border-dim);
   cursor: pointer; transition: background .15s;
 }
 .fight-player-row:last-child { border-bottom: none; }
 .fight-player-row:hover { background: rgba(255,255,255,.04); }
-.att-row:hover { background: rgba(99,102,241,.06); }
+.att-row:hover { background: rgba(45,212,191,.06); }
 .def-row:hover { background: rgba(245,158,11,.05); }
+
+/* MVP glimmers — only one per fight */
+.player-mvp--kda {
+  background: linear-gradient(90deg, rgba(251,146,60,.08) 0%, transparent 60%);
+  border-left: 2px solid #fb923c;
+  animation: shimmer-kda 3s ease-in-out infinite;
+}
+.player-mvp--charge {
+  background: linear-gradient(90deg, rgba(167,139,250,.08) 0%, transparent 60%);
+  border-left: 2px solid #a78bfa;
+  animation: shimmer-charge 3s ease-in-out infinite;
+}
+@keyframes shimmer-kda {
+  0%,100% { box-shadow: inset 0 0 20px rgba(251,146,60,.06); }
+  50%      { box-shadow: inset 0 0 30px rgba(251,146,60,.15); }
+}
+@keyframes shimmer-charge {
+  0%,100% { box-shadow: inset 0 0 20px rgba(167,139,250,.06); }
+  50%      { box-shadow: inset 0 0 30px rgba(167,139,250,.18); }
+}
 
 .fight-player-rank { font-size: 11px; font-weight: 700; color: var(--muted); }
 .fight-player-rank.rank-1 { color: #f59e0b; }
@@ -1743,8 +1787,30 @@ img { display: block; }
 
 .fight-player-head { width: 24px; height: 24px; border-radius: 3px; image-rendering: pixelated; }
 
-.fight-player-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.fight-player-name { font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .fight-player-town { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+.mvp-badge {
+  font-family: 'Minecraft', monospace, sans-serif;
+  font-size: 9px; font-weight: 900; letter-spacing: .08em;
+  padding: 1px 5px; border-radius: 3px;
+  text-transform: uppercase; white-space: nowrap;
+  animation: mvp-pulse 2s ease-in-out infinite;
+}
+.mvp-badge--kda {
+  color: #fbbf24;
+  text-shadow: 0 0 6px #f59e0b, 0 0 12px #f59e0b, 0 0 24px rgba(245,158,11,.6);
+  background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.3);
+}
+.mvp-badge--obj {
+  color: #c084fc;
+  text-shadow: 0 0 6px #a855f7, 0 0 12px #a855f7, 0 0 24px rgba(168,85,247,.6);
+  background: rgba(168,85,247,.1); border: 1px solid rgba(168,85,247,.3);
+}
+@keyframes mvp-pulse {
+  0%,100% { opacity: 1; }
+  50%      { opacity: .75; }
+}
 
 .fight-player-kda { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 2px; }
 .kda-k { color: #10b981; }
@@ -1753,6 +1819,10 @@ img { display: block; }
 .kda-sep { color: var(--dim); font-weight: 400; }
 
 .fight-player-dmg { font-size: 12px; color: var(--muted); text-align: right; }
+
+.fight-player-cg { font-size: 11px; font-weight: 600; display: flex; flex-direction: row; align-items: baseline; gap: 3px; white-space: nowrap; }
+.cg-val { color: var(--text); }
+.cg-pct { font-size: 10px; color: var(--muted); font-weight: 400; }
 
 /* Player detail modal */
 .modal-box--wide { max-width: 520px; }
@@ -1770,6 +1840,10 @@ img { display: block; }
   color: var(--muted); padding: 8px 0 16px; border-bottom: 1px solid var(--border-dim);
   margin-bottom: 16px;
 }
+
+.modal-potions-grid { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0; }
+.modal-potion-item { font-size: 11px; color: var(--muted); background: var(--bg); border-radius: 4px; padding: 3px 7px; text-transform: capitalize; }
+.modal-potion-count { font-weight: 700; color: var(--text); }
 
 .detail-section { margin-bottom: 20px; }
 .detail-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin-bottom: 8px; }
@@ -1833,7 +1907,7 @@ img { display: block; }
   color: var(--text); border-radius: var(--radius); padding: 11px 16px;
   font-size: 14px; outline: none; transition: border-color .2s;
 }
-.players-search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56,189,248,.1); }
+.players-search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(45,212,191,.1); }
 .players-search-btn {
   background: var(--accent); color: #07111f; border: none; border-radius: var(--radius);
   padding: 11px 22px; font-size: 13px; font-weight: 700; cursor: pointer;
@@ -1892,7 +1966,7 @@ img { display: block; }
 
 .plb-filter-note {
   padding: 8px 14px; font-size: 11px; color: var(--dim);
-  border-bottom: 1px solid var(--border-dim); background: rgba(56,189,248,.04);
+  border-bottom: 1px solid var(--border-dim); background: rgba(45,212,191,.04);
   font-style: italic;
 }
 

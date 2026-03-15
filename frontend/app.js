@@ -1674,8 +1674,8 @@ function _renderFightList() {
     const winCls = won ? 'fight-winner--att' : 'fight-winner--def';
     const attCls = won ? 'fr-town--att fr-town--winner' : 'fr-town--att';
     const defCls = won ? 'fr-town--def' : 'fr-town--def fr-town--winner';
-    const attK   = `${f.attacker_kills ?? 0}K`;
-    const defK   = `${f.defender_kills ?? 0}K`;
+    const attMark = won ? '<span class="fr-result-mark fr-win">✓</span>' : '<span class="fr-result-mark fr-loss">✗</span>';
+    const defMark = won ? '<span class="fr-result-mark fr-loss">✗</span>' : '<span class="fr-result-mark fr-win">✓</span>';
     const world  = f.world ? `<span class="fr-world">${f.world}</span>` : '<span></span>';
     const liveBadge = f.is_live ? '<span class="fight-winner-badge fight-winner--live">LIVE</span>' : '';
     return `
@@ -1686,14 +1686,12 @@ function _renderFightList() {
         </div>
         ${world}
         <div class="fr-matchup">
-          <span class="fr-town ${attCls}">⚔ ${f.attacker_town || 'Attackers'}</span>
-          <span class="fr-kills fr-kills--att">${attK}</span>
+          <span class="fr-town ${attCls}">⚔ ${f.attacker_town || 'Attackers'} ${attMark}</span>
           <span class="fr-vs">vs</span>
-          <span class="fr-kills fr-kills--def">${defK}</span>
-          <span class="fr-town ${defCls}">🛡 ${f.defender_town || 'Defenders'}</span>
+          <span class="fr-town ${defCls}">${defMark} 🛡 ${f.defender_town || 'Defenders'}</span>
         </div>
         <div class="fr-meta">
-          <span class="fr-players">${f.total_players ?? '?'}p</span>
+          <span class="fr-players">${f.total_players ?? '?'} players</span>
           <span class="fr-dur">${f.duration || '—'}</span>
         </div>
         ${liveBadge || `<div class="fight-winner-badge ${winCls}">${f.winner || '?'} Win</div>`}
@@ -1757,12 +1755,13 @@ function backToFightList() {
 }
 
 function _renderFightDetail(fight) {
-  const won     = fight.winner === fight.attacker_town;
-  const winCls  = won ? 'fight-winner--att' : 'fight-winner--def';
+  const attWon  = fight.winner === fight.attacker_town;
+  const defWon  = fight.winner === fight.defender_town;
+  const winCls  = attWon ? 'fight-winner--att' : 'fight-winner--def';
   const winLbl  = fight.winner ? `${fight.winner} Win` : 'Draw';
   const dur     = fight.duration || '';
   const total   = (fight.attackers?.length||0) + (fight.defenders?.length||0);
-  const metaParts = [fight.location || fight.world, fight.date_display, fight.time_display,
+  const metaParts = [fight.world || fight.location, fight.date_display, fight.time_display,
                      total + ' players', dur].filter(Boolean);
 
   const renderTotals = (t, cls) => {
@@ -1784,25 +1783,55 @@ function _renderFightDetail(fight) {
     </div>`;
   };
 
+  // Pre-compute MVP players across both teams
+  const allPlayers = [...(fight.attackers||[]), ...(fight.defenders||[])];
+  const bestKdaPlayer = allPlayers.reduce((best, p) => {
+    const kd = p.deaths ? p.kills / p.deaths : p.kills;
+    const bestKd = best ? (best.deaths ? best.kills / best.deaths : best.kills) : -1;
+    return (p.kills >= 3 && kd > bestKd) ? p : best;
+  }, null);
+  const mostChargesPlayer = allPlayers.reduce((best, p) =>
+    (p.charges_taken||0) > (best?.charges_taken||0) ? p : best, null);
+
+  const _fightSort = window._fightDetailSort || 'kills';
+  const sortPlayers = arr => {
+    if (!arr?.length) return arr;
+    const s = [...arr];
+    if (_fightSort === 'damage') s.sort((a,b) => (b.damage_dealt||0) - (a.damage_dealt||0));
+    else if (_fightSort === 'kda')  s.sort((a,b) => {
+      const kd = p => p.deaths ? p.kills/p.deaths : p.kills;
+      return kd(b) - kd(a);
+    });
+    else s.sort((a,b) => (b.kills||0) - (a.kills||0) || (b.assists||0) - (a.assists||0));
+    return s;
+  };
+
   const renderPlayers = (players, cls, side) => {
     if (!players?.length) return '<div class="empty-state">No data.</div>';
-    return players.map((p, i) => {
+    return sortPlayers(players).map((p, i) => {
       const rLabel = i === 0 ? '1ST' : i === 1 ? '2ND' : i === 2 ? '3RD' : `#${i+1}`;
       const rClass = i < 3 ? `rank-${i+1}` : '';
-      const dpsVal = p.dps_avg ? `${parseFloat(p.dps_avg).toFixed(1)} DPS`
-                               : p.damage_dealt ? p.damage_dealt.toLocaleString()
-                               : '—';
-      const rightTitle = p.dps_avg ? 'Avg DPS' : 'Damage Dealt';
+      const isKdaMvp     = bestKdaPlayer && p.name === bestKdaPlayer.name;
+      const isChargeMvp  = mostChargesPlayer && (mostChargesPlayer.charges_taken||0) > 0 && p.name === mostChargesPlayer.name;
+      const mvpCls = isKdaMvp ? 'player-mvp--kda' : isChargeMvp ? 'player-mvp--charge' : '';
+      const dmgVal = p.damage_dealt ? p.damage_dealt.toLocaleString() : '—';
       return `
-        <div class="fight-player-row ${cls}-row"
+        <div class="fight-player-row ${cls}-row ${mvpCls}"
              onclick="openPlayerModal('${p.name.replace(/'/g,"\\'")}','${side}')">
           <div class="fight-player-rank ${rClass}">${rLabel}</div>
           <img class="fight-player-head"
                src="https://mc-heads.net/avatar/${encodeURIComponent(p.name)}/24"
                alt="" loading="lazy">
           <div class="fight-player-info">
-            <div class="fight-player-name">${p.name}</div>
+            <div class="fight-player-name">
+              ${p.name}
+              ${isKdaMvp   ? '<span class="mvp-badge mvp-badge--kda">✦ BEST KDA</span>'        : ''}
+              ${isChargeMvp ? '<span class="mvp-badge mvp-badge--obj">⚡ BEST OBJECTIVE</span>' : ''}
+            </div>
             <div class="fight-player-town">${p.town || ''}</div>
+          </div>
+          <div class="fight-player-cg" title="Charges / Golems">
+            ${(()=>{const c=p.charges_taken||0,g=p.golem_kills||0,pct=g?Math.round(c/g*100):0;return `<span class="cg-val">${c}/${g}</span>${g?`<span class="cg-pct">(${pct}%)</span>`:''}`})()}
           </div>
           <div class="fight-player-kda">
             <span class="kda-k">${p.kills}</span>
@@ -1811,26 +1840,37 @@ function _renderFightDetail(fight) {
             <span class="kda-sep">/</span>
             <span class="kda-a">${p.assists}</span>
           </div>
-          <div class="fight-player-dmg" title="${rightTitle}">${dpsVal}</div>
+          <div class="fight-player-dmg" title="Damage Dealt">${dmgVal}</div>
         </div>`;
     }).join('');
   };
 
-  const teamPanel = (town, icon, players, totals, cls, side) => `
-    <div class="fight-team-panel fight-team-panel--${cls}">
+  const teamPanel = (town, icon, players, totals, cls, side) => {
+    const isWinner = fight.winner && fight.winner === town;
+    const isLoser  = fight.winner && fight.winner !== town;
+    const resultMark = isWinner
+      ? '<span class="fr-result-mark fr-win team-result-mark">✓</span>'
+      : isLoser
+        ? '<span class="fr-result-mark fr-loss team-result-mark">✗</span>'
+        : '';
+    const winnerCls = isWinner ? 'fight-team-panel--winner' : '';
+    return `
+    <div class="fight-team-panel fight-team-panel--${cls} ${winnerCls}">
       <div class="fight-team-header fight-team-header--${cls}">
-        <div class="fight-team-header-main">${icon} ${town || (cls==='att'?'Attackers':'Defenders')}</div>
+        <div class="fight-team-header-main">${icon} ${town || (cls==='att'?'Attackers':'Defenders')} ${resultMark}</div>
         <span class="fight-team-count">${players?.length||0} players</span>
       </div>
       ${renderTotals(totals, cls)}
       <div class="fight-leaderboard-header">
         <span class="lbh-rank">Rank</span><span></span>
         <span class="lbh-name">Player</span>
+        <span class="lbh-cg">Charges/Golems</span>
         <span class="lbh-kda">K/D/A</span>
-        <span class="lbh-dmg">${fight.attackers?.[0]?.dps_avg != null ? 'Avg DPS' : 'Dmg'}</span>
+        <span class="lbh-dmg" title="Damage dealt to enemy team only. Friendly fire is excluded.">Dmg *</span>
       </div>
       <div class="fight-leaderboard">${renderPlayers(players, cls, side)}</div>
     </div>`;
+  };
 
   document.getElementById('fightDetail').innerHTML = `
     <div class="fight-detail-header">
@@ -1843,10 +1883,22 @@ function _renderFightDetail(fight) {
         </div>
       </div>
     </div>
+    <div class="fight-player-sort">
+      <span class="fight-sort-label">Sort by</span>
+      <button class="fight-sort-btn ${_fightSort==='kills'  ?'active':''}" onclick="setFightSort('kills')">Kills</button>
+      <button class="fight-sort-btn ${_fightSort==='damage' ?'active':''}" onclick="setFightSort('damage')">Damage</button>
+      <button class="fight-sort-btn ${_fightSort==='kda'    ?'active':''}" onclick="setFightSort('kda')">K/D</button>
+    </div>
     <div class="fight-teams-grid">
       ${teamPanel(fight.attacker_town, '⚔', fight.attackers, fight.attacker_totals, 'att', 'attacker')}
       ${teamPanel(fight.defender_town, '🛡', fight.defenders, fight.defender_totals, 'def', 'defender')}
-    </div>`;
+    </div>
+    <div class="fight-dmg-disclaimer">* Damage reflects hits landed on the opposing team only. Friendly fire is not included in these totals.</div>`;
+}
+
+function setFightSort(s) {
+  window._fightDetailSort = s;
+  if (_currentFight) _renderFightDetail(_currentFight);
 }
 
 function openPlayerModal(playerName, side) {
@@ -1860,11 +1912,18 @@ function openPlayerModal(playerName, side) {
   document.getElementById('fightModalSubtitle').textContent =
     `${p.town || ''} · ${side === 'attacker' ? fight.attacker_town : fight.defender_town}`;
 
-  const kd        = p.deaths ? (p.kills / p.deaths).toFixed(2) : '∞';
-  const totalPots = Object.values(p.potions || {}).reduce((s,v) => s + v, 0);
+  const kd = p.deaths ? (p.kills / p.deaths).toFixed(2) : '∞';
 
-  const potionRows = Object.entries(p.potions || {}).filter(([,v]) => v > 0)
-    .map(([k,v]) => `<div class="detail-stat-row"><span>${k}</span><span class="detail-stat-val">${v}</span></div>`).join('');
+  const totalFood = typeof p.food === 'object' && !Array.isArray(p.food)
+    ? Object.values(p.food).reduce((s,v) => s + v, 0)
+    : (p.food || 0);
+
+  const potionLines = typeof p.potions === 'object' && !Array.isArray(p.potions)
+    ? Object.entries(p.potions)
+        .sort((a,b) => b[1] - a[1])
+        .map(([k,v]) => `<span class="modal-potion-item"><span class="modal-potion-count">${v}</span> ${k.replace(/_/g,' ')}</span>`)
+        .join('')
+    : (p.potions ? `<span class="modal-potion-item">${p.potions} potions</span>` : '');
 
   document.getElementById('fightModalBody').innerHTML = `
     <div class="fight-modal-kda">
@@ -1875,16 +1934,20 @@ function openPlayerModal(playerName, side) {
     </div>
     <div class="fight-modal-dmg-row">
       <span>${kd} K/D</span>
-      <span>${p.golem_kills||0} golems · ${p.charges_taken||0} charges</span>
-      ${p.damage_dealt ? `<span>${p.damage_dealt.toLocaleString()} dmg</span>` : ''}
+      <span>${p.damage_dealt?.toLocaleString()||0} dmg dealt</span>
+      <span>${p.golem_kills||0} golems · ${p.charges_taken||0} charges · ${p.lamps||0} lamps</span>
     </div>
+    ${(p.shulkers_broken||0) + (p.shulkers_placed||0) > 0 ? `
     <div class="fight-modal-dmg-row" style="margin-top:4px">
-      <span>${totalPots} potions</span>
-      <span>${Object.values(p.food||{}).reduce((s,v)=>s+v,0)} food</span>
+      <span>${p.shulkers_broken||0} shulkers broken · ${p.shulkers_placed||0} placed</span>
+    </div>` : ''}
+    ${potionLines ? `
+    <div class="modal-potions-grid" style="margin-top:6px">${potionLines}</div>` : ''}
+    <div class="fight-modal-dmg-row" style="margin-top:4px">
+      <span>${totalFood} food</span>
       ${p.ancient_ingots ? `<span>${p.ancient_ingots} ingots</span>` : ''}
-      ${p.crits ? `<span>${p.crits}/${p.total_hits||0} crits (${p.crit_ratio||0}%)</span>` : ''}
+      ${p.close_calls ? `<span>${p.close_calls} close calls</span>` : ''}
     </div>
-    ${potionRows ? `<div class="detail-section"><div class="detail-section-title">Potions</div>${potionRows}</div>` : ''}
   `;
   document.getElementById('fightPlayerModal').style.display = 'flex';
 }
