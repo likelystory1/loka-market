@@ -581,6 +581,20 @@ def _rebuild_fights_index():
     if not os.path.isdir(PARSED_DIR):
         _fights_rebuilding = False
         return results
+
+    # Load date/time/timestamp from eb_fights.db keyed by fight ID
+    eb_db_path = os.path.join(BASE_DIR, 'eb_fights.db')
+    eb_dates = {}
+    if os.path.exists(eb_db_path):
+        try:
+            import sqlite3 as _sq
+            _db = _sq.connect(eb_db_path)
+            eb_dates = {r[0]: (r[1], r[2], r[3]) for r in
+                        _db.execute('SELECT id, fight_date, fight_time, timestamp FROM eb_fights').fetchall()}
+            _db.close()
+        except Exception as e:
+            print(f'[fights] eb_dates load error: {e}')
+
     for path in Path(PARSED_DIR).glob('*.json'):
         try:
             with open(path, encoding='utf-8') as f:
@@ -588,6 +602,7 @@ def _rebuild_fights_index():
             total = len(d.get('attackers', [])) + len(d.get('defenders', []))
             with _active_fight_lock:
                 is_live = path.stem in _active_fight_logs
+            eb = eb_dates.get(path.stem, ())
             results.append({
                 'filename':       path.stem,
                 'location':       d.get('location', ''),
@@ -596,21 +611,21 @@ def _rebuild_fights_index():
                 'attacker_town':  d.get('attacker_town', ''),
                 'defender_town':  d.get('defender_town', ''),
                 'world':          d.get('world', ''),
-                'date_display':   d.get('date_display', ''),
-                'time_display':   d.get('time_display', ''),
+                'date_display':   eb[0] if eb else d.get('date_display', ''),
+                'time_display':   eb[1] if eb else d.get('time_display', ''),
                 'attacker_count': len(d.get('attackers', [])),
                 'defender_count': len(d.get('defenders', [])),
                 'attacker_kills': d.get('attacker_kills', 0),
                 'defender_kills': d.get('defender_kills', 0),
                 'total_players':  total,
                 'is_live':        is_live,
-                '_mtime':         path.stat().st_mtime,
+                '_ts':            eb[2] if eb else path.stat().st_mtime,
             })
         except Exception as e:
             print(f'[fights] error reading {path.name}: {e}')
-    results.sort(key=lambda r: (not r['is_live'], r['attacker_town'].lower()))
+    results.sort(key=lambda r: (not r['is_live'], -(r['_ts'] or 0)))
     for r in results:
-        del r['_mtime']
+        del r['_ts']
     # Save to disk so next startup is instant
     try:
         tmp = _FIGHTS_INDEX_PATH + '.tmp'
@@ -650,7 +665,7 @@ def api_fights():
 
 @app.route("/api/fights/<path:filename>")
 def api_fight_detail(filename):
-    """Serve a pre-parsed fight JSON by original .txt filename or .json stem."""
+    """Serve a pre-parsed fight JSON, enriched with date from eb_fights.db."""
     if '/' in filename or '..' in filename:
         abort(400)
     stem = filename.removesuffix('.txt').removesuffix('.json')
@@ -658,7 +673,32 @@ def api_fight_detail(filename):
     if not os.path.exists(jp):
         abort(404)
     with open(jp, encoding='utf-8') as f:
-        return app.response_class(f.read(), content_type='application/json')
+        d = json.load(f)
+    # Enrich with date/location from eb_fights.db if missing
+    if not d.get('date_display'):
+        eb_db_path = os.path.join(BASE_DIR, 'eb_fights.db')
+        if os.path.exists(eb_db_path):
+            try:
+                import sqlite3 as _sq
+                _db = _sq.connect(eb_db_path)
+                row = _db.execute(
+                    'SELECT fight_date, fight_time, location FROM eb_fights WHERE id=?', (stem,)
+                ).fetchone()
+                _db.close()
+                if row:
+                    if row[0]: d['date_display'] = row[0]
+                    if row[1]: d['time_display'] = row[1]
+                    if row[2] and not d.get('location'): d['location'] = row[2]
+            except Exception:
+                pass
+    # Clear world if it looks like a fight ID (no spaces, mixed case alnum)
+    if d.get('world') and d['world'].replace('$','').replace('@','').replace('!','').isalnum():
+        d['world'] = ''
+    # Sort players by kills desc
+    for side in ('attackers', 'defenders'):
+        if d.get(side):
+            d[side].sort(key=lambda p: p.get('kills', 0), reverse=True)
+    return jsonify(d)
 
 
 @app.route("/<path:filename>")
