@@ -528,9 +528,18 @@ def _poll_active_fights() -> int:
     return len(seen)
 
 def _fight_poll_loop():
+    from eb_fight_scraper import run_incremental as _eb_incremental
+    eb_check_interval = 300   # check EB for new fights every 5 min
+    last_eb_check     = 0.0
     while True:
         active = _poll_active_fights()
-        # Poll fast while a fight is live so we capture the full log
+        now = time.time()
+        if now - last_eb_check >= eb_check_interval:
+            try:
+                _eb_incremental()
+            except Exception as e:
+                print(f'[eb-fights] incremental error: {e}')
+            last_eb_check = time.time()
         time.sleep(10 if active else 60)
 
 @app.route("/api/fights")
@@ -581,6 +590,30 @@ def api_fight_detail(filename):
         abort(404)
     with open(jp, encoding='utf-8') as f:
         return app.response_class(f.read(), content_type='application/json')
+
+# ── api: EldritchBot fight history ────────────────────────────────────────────
+from eb_fight_scraper import list_fights as _eb_list, get_fight as _eb_get, get_stats as _eb_stats
+
+@app.route("/api/eb_fights")
+def api_eb_fights():
+    limit  = min(int(request.args.get('limit',  50)), 200)
+    offset = int(request.args.get('offset', 0))
+    town   = request.args.get('town',  None)
+    world  = request.args.get('world', None)
+    return jsonify(_eb_list(limit=limit, offset=offset, town=town, world=world))
+
+@app.route("/api/eb_fights/<fight_id>")
+def api_eb_fight_detail(fight_id):
+    if '/' in fight_id or '..' in fight_id:
+        abort(400)
+    fight = _eb_get(fight_id)
+    if not fight:
+        abort(404)
+    return jsonify(fight)
+
+@app.route("/api/eb_fights/stats")
+def api_eb_fights_stats():
+    return jsonify(_eb_stats())
 
 @app.route("/<path:filename>")
 def static_files(filename):
@@ -1102,15 +1135,18 @@ def api_eldritch_player(identifier):
 
 def _eldritch_init():
     """
-    Startup: only queue players already in player_stats for a daily refresh.
-    Full bulk scraping is done manually via run_scraper.py.
+    Startup: re-queue stale player_stats records for daily refresh, then
+    start the background worker so those jobs get processed continuously.
     """
     time.sleep(5)
     import sqlite3 as _sq
-    from eldritch_scraper import DB_PATH as _EB_PATH, _REFRESH_DAYS
-    db  = _sq.connect(_EB_PATH)
-    now = int(time.time())
+    from eldritch_scraper import DB_PATH as _EB_PATH, LOKA_PATH as _LOKA_PATH, _REFRESH_DAYS
+    db   = _sq.connect(_EB_PATH)
+    loka = _sq.connect(_LOKA_PATH)
+    now    = int(time.time())
     cutoff = now - _REFRESH_DAYS * 86400
+
+    # 1) Re-queue existing records that are stale (>30 days old)
     db.execute('''
         INSERT OR IGNORE INTO scrape_queue (uuid, priority, queued_ts, status)
         SELECT uuid, 9, ?, 'pending'
@@ -1118,10 +1154,29 @@ def _eldritch_init():
         WHERE error IS NULL AND name != '' AND scraped_ts < ?
     ''', (now, cutoff))
     stale = db.execute('SELECT changes()').fetchone()[0]
+
+    # 2) Queue any Loka players never attempted yet (not in scrape_queue at all)
+    loka_uuids = [r[0] for r in loka.execute('SELECT uuid FROM loka_players').fetchall()]
+    loka.close()
+    new_q = 0
+    for uuid in loka_uuids:
+        db.execute('''
+            INSERT OR IGNORE INTO scrape_queue (uuid, priority, queued_ts, status)
+            VALUES (?, 9, ?, 'pending')
+        ''', (uuid, now))
+        new_q += db.execute('SELECT changes()').fetchone()[0]
+
     db.commit()
     db.close()
+
     if stale:
-        print(f'[eldritch] re-queued {stale} stale player records for daily refresh')
+        print(f'[eldritch] re-queued {stale} stale records for refresh')
+    if new_q:
+        print(f'[eldritch] queued {new_q} new Loka players for first scrape')
+
+    # 3) Start the persistent background worker
+    start_worker()
+    print('[eldritch] background scrape worker started')
 
 # ── loka data cache (file-backed, refreshed every 5 min) ─────────────────────
 LOKA_CACHE_DIR       = os.path.join(BASE_DIR, "cache")
@@ -1220,7 +1275,8 @@ threading.Thread(target=_warmup,          daemon=True).start()
 threading.Thread(target=_loka_cache_loop, daemon=True).start()
 threading.Thread(target=_fight_poll_loop,  daemon=True).start()
 threading.Thread(target=_eldritch_init,    daemon=True).start()
-# Bulk scraper runs as a separate process: python run_scraper.py --threads 8
+# Note: background scrape worker is started inside _eldritch_init after a 5s delay.
+# For a full first-time bulk scrape: python run_scraper.py --threads 8
 
 def _get_alliances_for_poller():
     """Return alliances list from the loka cache file."""
