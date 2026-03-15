@@ -123,6 +123,10 @@ def parse_fight_log(filepath: str) -> dict:
             body = m.group(2)
 
             if past_battle_end:
+                if not winner and body.startswith('Winner: '):
+                    winner = body[8:].strip(); continue
+                if not duration and body.startswith('Battle lasted '):
+                    duration = body[14:].strip(); continue
                 ms = RE_SECTION.match(body)
                 if ms:
                     sec = ms.group(1).strip()
@@ -156,7 +160,7 @@ def parse_fight_log(filepath: str) -> dict:
                     continue
 
             if not winner and body.startswith('Winner: '):
-                winner = body[8:].strip(); continue
+                winner = body[8:].strip(); continue  # fallback for non-standard log ordering
             if not duration and body.startswith('Battle lasted '):
                 duration = body[14:].strip(); continue
             if not mutator and body.startswith('Mutator: '):

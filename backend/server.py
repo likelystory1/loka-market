@@ -589,8 +589,8 @@ def _rebuild_fights_index():
         try:
             import sqlite3 as _sq
             _db = _sq.connect(eb_db_path)
-            eb_dates = {r[0]: (r[1], r[2], r[3]) for r in
-                        _db.execute('SELECT id, fight_date, fight_time, timestamp FROM eb_fights').fetchall()}
+            eb_dates = {r[0]: (r[1], r[2], r[3], r[4], r[5], r[6]) for r in
+                        _db.execute('SELECT id, fight_date, fight_time, timestamp, world, attackers_won, attacker_town FROM eb_fights').fetchall()}
             _db.close()
         except Exception as e:
             print(f'[fights] eb_dates load error: {e}')
@@ -603,14 +603,24 @@ def _rebuild_fights_index():
             with _active_fight_lock:
                 is_live = path.stem in _active_fight_logs
             eb = eb_dates.get(path.stem, ())
+            att_town = d.get('attacker_town', '')
+            def_town = d.get('defender_town', '')
+            # Resolve winner to a town name
+            parsed_winner = d.get('winner', '')
+            if parsed_winner in ('attackers', 'defenders'):
+                parsed_winner = att_town if parsed_winner == 'attackers' else def_town
+            if eb and not parsed_winner:
+                eb_att_won, eb_att_town = eb[4], eb[5]
+                if eb_att_won is not None:
+                    parsed_winner = (eb_att_town or att_town) if eb_att_won else def_town
             results.append({
                 'filename':       path.stem,
                 'location':       d.get('location', ''),
-                'winner':         d.get('winner', ''),
+                'winner':         parsed_winner,
                 'duration':       d.get('duration', ''),
-                'attacker_town':  d.get('attacker_town', ''),
-                'defender_town':  d.get('defender_town', ''),
-                'world':          d.get('world', ''),
+                'attacker_town':  att_town,
+                'defender_town':  def_town,
+                'world':          (eb[3] if eb else None) or d.get('world', ''),
                 'date_display':   eb[0] if eb else d.get('date_display', ''),
                 'time_display':   eb[1] if eb else d.get('time_display', ''),
                 'attacker_count': len(d.get('attackers', [])),
@@ -674,26 +684,30 @@ def api_fight_detail(filename):
         abort(404)
     with open(jp, encoding='utf-8') as f:
         d = json.load(f)
-    # Enrich with date/location from eb_fights.db if missing
-    if not d.get('date_display'):
-        eb_db_path = os.path.join(BASE_DIR, 'eb_fights.db')
-        if os.path.exists(eb_db_path):
-            try:
-                import sqlite3 as _sq
-                _db = _sq.connect(eb_db_path)
-                row = _db.execute(
-                    'SELECT fight_date, fight_time, location FROM eb_fights WHERE id=?', (stem,)
-                ).fetchone()
-                _db.close()
-                if row:
-                    if row[0]: d['date_display'] = row[0]
-                    if row[1]: d['time_display'] = row[1]
-                    if row[2] and not d.get('location'): d['location'] = row[2]
-            except Exception:
-                pass
-    # Clear world if it looks like a fight ID (no spaces, mixed case alnum)
-    if d.get('world') and d['world'].replace('$','').replace('@','').replace('!','').isalnum():
-        d['world'] = ''
+    # Enrich with date/location/winner from eb_fights.db
+    eb_db_path = os.path.join(BASE_DIR, 'eb_fights.db')
+    if os.path.exists(eb_db_path):
+        try:
+            import sqlite3 as _sq
+            _db = _sq.connect(eb_db_path)
+            row = _db.execute(
+                'SELECT fight_date, fight_time, location, world, attackers_won, attacker_town FROM eb_fights WHERE id=?', (stem,)
+            ).fetchone()
+            _db.close()
+            if row:
+                if row[0] and not d.get('date_display'): d['date_display'] = row[0]
+                if row[1] and not d.get('time_display'): d['time_display'] = row[1]
+                if row[2] and not d.get('location'):     d['location'] = row[2]
+                if row[3]: d['world'] = row[3]  # DB world always takes priority
+                # Resolve winner to a town name
+                winner = d.get('winner', '')
+                if winner in ('attackers', 'defenders'):
+                    winner = d.get('attacker_town', '') if winner == 'attackers' else d.get('defender_town', '')
+                if not winner and row[4] is not None:
+                    winner = (row[5] or d.get('attacker_town', '')) if row[4] else d.get('defender_town', '')
+                d['winner'] = winner
+        except Exception:
+            pass
     # Sort players by kills desc
     for side in ('attackers', 'defenders'):
         if d.get(side):
