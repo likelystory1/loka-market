@@ -542,14 +542,19 @@ def _fight_poll_loop():
             last_eb_check = time.time()
         time.sleep(10 if active else 60)
 
-@app.route("/api/fights")
-def api_fights():
-    """List all pre-parsed fight JSON files."""
+_fights_cache     = None
+_fights_cache_ts  = 0.0
+_FIGHTS_CACHE_TTL = 3600  # seconds — index is large; refresh hourly
+
+def _load_fights_index():
+    global _fights_cache, _fights_cache_ts
+    now = time.time()
+    if _fights_cache is not None and now - _fights_cache_ts < _FIGHTS_CACHE_TTL:
+        return _fights_cache
     results = []
     if not os.path.isdir(PARSED_DIR):
-        return jsonify(results)
-    for path in sorted(Path(PARSED_DIR).glob('*.json'),
-                       key=lambda p: p.stat().st_mtime, reverse=True):
+        return results
+    for path in Path(PARSED_DIR).glob('*.json'):
         try:
             with open(path, encoding='utf-8') as f:
                 d = json.load(f)
@@ -557,15 +562,13 @@ def api_fights():
             with _active_fight_lock:
                 is_live = path.stem in _active_fight_logs
             results.append({
-                'filename':       path.stem + '.txt',
-                'json_file':      path.name,
+                'filename':       path.stem,
                 'location':       d.get('location', ''),
                 'winner':         d.get('winner', ''),
                 'duration':       d.get('duration', ''),
                 'attacker_town':  d.get('attacker_town', ''),
                 'defender_town':  d.get('defender_town', ''),
                 'world':          d.get('world', ''),
-                'territory_num':  d.get('territory_num', ''),
                 'date_display':   d.get('date_display', ''),
                 'time_display':   d.get('time_display', ''),
                 'attacker_count': len(d.get('attackers', [])),
@@ -574,10 +577,30 @@ def api_fights():
                 'defender_kills': d.get('defender_kills', 0),
                 'total_players':  total,
                 'is_live':        is_live,
+                '_mtime':         path.stat().st_mtime,
             })
         except Exception as e:
             print(f'[fights] error reading {path.name}: {e}')
-    return jsonify(results)
+    # Sort: live first, then by file mtime desc (most recently downloaded = most recent fight)
+    results.sort(key=lambda r: (not r['is_live'], -r['_mtime']))
+    for r in results:
+        del r['_mtime']
+    _fights_cache    = results
+    _fights_cache_ts = now
+    return results
+
+@app.route("/api/fights")
+def api_fights():
+    """List all pre-parsed fight JSON files with pagination."""
+    limit  = min(int(request.args.get('limit',  50)), 500)
+    offset = int(request.args.get('offset', 0))
+    town   = request.args.get('town', '').strip().lower()
+    all_fights = _load_fights_index()
+    if town:
+        all_fights = [f for f in all_fights
+                      if town in f['attacker_town'].lower() or town in f['defender_town'].lower()]
+    page = all_fights[offset:offset + limit]
+    return jsonify({'fights': page, 'total': len(all_fights)})
 
 @app.route("/api/fights/<path:filename>")
 def api_fight_detail(filename):
@@ -591,29 +614,6 @@ def api_fight_detail(filename):
     with open(jp, encoding='utf-8') as f:
         return app.response_class(f.read(), content_type='application/json')
 
-# ── api: EldritchBot fight history ────────────────────────────────────────────
-from eb_fight_scraper import list_fights as _eb_list, get_fight as _eb_get, get_stats as _eb_stats
-
-@app.route("/api/eb_fights")
-def api_eb_fights():
-    limit  = min(int(request.args.get('limit',  50)), 200)
-    offset = int(request.args.get('offset', 0))
-    town   = request.args.get('town',  None)
-    world  = request.args.get('world', None)
-    return jsonify(_eb_list(limit=limit, offset=offset, town=town, world=world))
-
-@app.route("/api/eb_fights/<fight_id>")
-def api_eb_fight_detail(fight_id):
-    if '/' in fight_id or '..' in fight_id:
-        abort(400)
-    fight = _eb_get(fight_id)
-    if not fight:
-        abort(404)
-    return jsonify(fight)
-
-@app.route("/api/eb_fights/stats")
-def api_eb_fights_stats():
-    return jsonify(_eb_stats())
 
 @app.route("/<path:filename>")
 def static_files(filename):
@@ -1275,6 +1275,7 @@ threading.Thread(target=_warmup,          daemon=True).start()
 threading.Thread(target=_loka_cache_loop, daemon=True).start()
 threading.Thread(target=_fight_poll_loop,  daemon=True).start()
 threading.Thread(target=_eldritch_init,    daemon=True).start()
+threading.Thread(target=_load_fights_index, daemon=True).start()  # pre-warm fights index
 # Note: background scrape worker is started inside _eldritch_init after a 5s delay.
 # For a full first-time bulk scrape: python run_scraper.py --threads 8
 
