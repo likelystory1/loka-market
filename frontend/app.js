@@ -1751,8 +1751,6 @@ function backToFightList() {
 
 function _renderFightDetail(fight) {
   const won     = fight.winner === fight.attacker_town;
-
-  const won     = fight.winner === fight.attacker_town;
   const winCls  = won ? 'fight-winner--att' : 'fight-winner--def';
   const winLbl  = fight.winner ? `${fight.winner} Win` : 'Draw';
   const dur     = fight.duration || '';
