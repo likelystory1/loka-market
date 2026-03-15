@@ -140,7 +140,10 @@ def get_fight(fight_id: str) -> dict | None:
     if not row:
         return None
     r = dict(row)
-    r['fight_data'] = json.loads(r['fight_data']) if r['fight_data'] else {}
+    try:
+        r['fight_data'] = json.loads(r['fight_data']) if r['fight_data'] else {}
+    except (json.JSONDecodeError, TypeError):
+        r['fight_data'] = {}
     return r
 
 def list_fights(limit=50, offset=0, town=None, world=None) -> dict:
