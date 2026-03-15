@@ -964,12 +964,19 @@ def top_sellers():
     mc_ids  = [u for u in uuids if not _MONGO_OID_RE.match(u)]
 
     oid_resolved: dict[str, tuple[str, str]] = resolve_loka_objectids(oid_ids) if oid_ids else {}
-    mc_names: dict[str, str]                 = resolve_uuids(mc_ids) if mc_ids else {}
+
+    # After resolving OIDs → MC UUIDs, look up current names via loka.db/Mojang
+    oid_mc_uuids = [mc_uuid for _, mc_uuid in oid_resolved.values() if mc_uuid]
+    mc_names: dict[str, str] = resolve_uuids(mc_ids + oid_mc_uuids) if (mc_ids or oid_mc_uuids) else {}
 
     def _seller_name(uid: str) -> str:
         if uid in oid_resolved:
-            name, _ = oid_resolved[uid]
-            return name if name else uid[:8] + "…"
+            _, mc_uuid = oid_resolved[uid]
+            if mc_uuid:
+                name = mc_names.get(mc_uuid, '')
+                return name if name else uid[:8] + "…"
+            loka_name, _ = oid_resolved[uid]
+            return loka_name if loka_name else uid[:8] + "…"
         return mc_names.get(uid, uid[:8] + "…")
 
     def _seller_mc_uuid(uid: str) -> str:
