@@ -542,17 +542,44 @@ def _fight_poll_loop():
             last_eb_check = time.time()
         time.sleep(10 if active else 60)
 
-_fights_cache     = None
-_fights_cache_ts  = 0.0
-_FIGHTS_CACHE_TTL = 3600  # seconds — index is large; refresh hourly
+_fights_cache      = None
+_fights_cache_ts   = 0.0
+_fights_rebuilding = False
+_FIGHTS_CACHE_TTL  = 3600  # seconds
+_FIGHTS_INDEX_PATH = os.path.join(FIGHTLOGS_DIR, 'fights_index.json')
 
 def _load_fights_index():
-    global _fights_cache, _fights_cache_ts
+    """Return the in-memory index, loading from disk if needed. Never blocks on file scan."""
+    global _fights_cache, _fights_cache_ts, _fights_rebuilding
     now = time.time()
     if _fights_cache is not None and now - _fights_cache_ts < _FIGHTS_CACHE_TTL:
         return _fights_cache
+    # Try loading from pre-built index file on disk (fast path)
+    if os.path.exists(_FIGHTS_INDEX_PATH):
+        try:
+            with open(_FIGHTS_INDEX_PATH, encoding='utf-8') as f:
+                data = json.load(f)
+            _fights_cache    = data
+            _fights_cache_ts = now
+            # Kick off a background rebuild so index stays fresh
+            if not _fights_rebuilding:
+                threading.Thread(target=_rebuild_fights_index, daemon=True).start()
+            return _fights_cache
+        except Exception as e:
+            print(f'[fights] index load error: {e}')
+    # No index file yet — rebuild now (only on very first boot)
+    return _rebuild_fights_index()
+
+def _rebuild_fights_index():
+    """Scan all parsed JSONs, build index, save to disk, update in-memory cache."""
+    global _fights_cache, _fights_cache_ts, _fights_rebuilding
+    if _fights_rebuilding:
+        return _fights_cache or []
+    _fights_rebuilding = True
+    print('[fights] rebuilding index…')
     results = []
     if not os.path.isdir(PARSED_DIR):
+        _fights_rebuilding = False
         return results
     for path in Path(PARSED_DIR).glob('*.json'):
         try:
@@ -581,12 +608,21 @@ def _load_fights_index():
             })
         except Exception as e:
             print(f'[fights] error reading {path.name}: {e}')
-    # Sort: live first, then by file mtime desc (most recently downloaded = most recent fight)
     results.sort(key=lambda r: (not r['is_live'], -r['_mtime']))
     for r in results:
         del r['_mtime']
-    _fights_cache    = results
-    _fights_cache_ts = now
+    # Save to disk so next startup is instant
+    try:
+        tmp = _FIGHTS_INDEX_PATH + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(results, f, separators=(',', ':'))
+        os.replace(tmp, _FIGHTS_INDEX_PATH)
+        print(f'[fights] index saved — {len(results):,} fights')
+    except Exception as e:
+        print(f'[fights] index save error: {e}')
+    _fights_cache      = results
+    _fights_cache_ts   = time.time()
+    _fights_rebuilding = False
     return results
 
 @app.route("/api/fights")
@@ -1275,7 +1311,7 @@ threading.Thread(target=_warmup,          daemon=True).start()
 threading.Thread(target=_loka_cache_loop, daemon=True).start()
 threading.Thread(target=_fight_poll_loop,  daemon=True).start()
 threading.Thread(target=_eldritch_init,    daemon=True).start()
-threading.Thread(target=_load_fights_index, daemon=True).start()  # pre-warm fights index
+threading.Thread(target=_rebuild_fights_index, daemon=True).start()  # build fights index on startup
 # Note: background scrape worker is started inside _eldritch_init after a 5s delay.
 # For a full first-time bulk scrape: python run_scraper.py --threads 8
 
